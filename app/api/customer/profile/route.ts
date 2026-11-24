@@ -23,7 +23,8 @@ export async function GET(req:Request){
     await init();
     const result=await pool.query('SELECT full_name,phone,addresses,preferences,updated_at FROM ebnimaam_customer_profiles WHERE user_id=$1',[user.id]);
     const profile=result.rows[0]||{full_name:user.name||'',phone:'',addresses:[],preferences:{}};
-    return NextResponse.json({profile:{...profile,email:user.email}});
+    const orders=await pool.query('SELECT reference,amount_kobo,status,fulfilment_status,items,created_at,paid_at FROM ebnimaam_orders WHERE LOWER(customer_email)=LOWER($1) ORDER BY created_at DESC LIMIT 100',[user.email]);
+    return NextResponse.json({profile:{...profile,email:user.email},orders:orders.rows});
   }catch{return NextResponse.json({error:'Could not load your saved details.'},{status:500})}
 }
 export async function PUT(req:Request){
