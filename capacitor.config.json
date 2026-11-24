@@ -1,0 +1,15 @@
+{
+  "appId": "com.ebnimaam.store",
+  "appName": "ebnimaam",
+  "webDir": "public",
+  "server": {
+    "url": "https://ebnimaam.vercel.app/store.html",
+    "cleartext": false,
+    "allowNavigation": [
+      "ebnimaam.vercel.app"
+    ]
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}
