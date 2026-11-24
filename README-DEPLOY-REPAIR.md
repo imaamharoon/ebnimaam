@@ -1,0 +1,2 @@
+# Ebnimaam deployment structure repair
+This adds a Next.js App Router entry point and serves the existing storefront HTML from /store.html. The legacy flat files remain unchanged. Payment APIs still need their route files and environment configuration verified before live launch.
