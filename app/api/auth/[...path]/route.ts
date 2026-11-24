@@ -14,7 +14,9 @@ async function proxy(req:Request,ctx:{params:{path:string[]}}){
   try{
     const upstream=await fetch(target,init);
     const out=new NextResponse(upstream.body,{status:upstream.status});
-    for(const key of ['content-type','set-cookie','location','cache-control']){const value=upstream.headers.get(key);if(value)out.headers.set(key,value)}
+    for(const key of ['content-type','location','cache-control']){const value=upstream.headers.get(key);if(value)out.headers.set(key,value)}
+    const cookies=(upstream.headers as any).getSetCookie?.()||[];
+    for(const cookie of cookies){const local=cookie.replace(/;\\s*Domain=[^;]*/ig,'').replace(/;\\s*Path=[^;]*/ig,'; Path=/');out.headers.append('set-cookie',local)}
     out.headers.set('cache-control','no-store');
     return out;
   }catch{return NextResponse.json({error:'Authentication service is temporarily unavailable.'},{status:502})}
