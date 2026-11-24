@@ -1,0 +1,1 @@
+import './globals.css';export const metadata={title:'ebnimaam — Thoughtfully curated',description:'Pieces chosen with purpose. Made to become part of your story.'};export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="en"><body>{children}</body></html>}
