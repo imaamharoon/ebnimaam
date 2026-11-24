@@ -2,7 +2,7 @@ import {NextResponse} from 'next/server';
 
 const base=process.env.NEON_AUTH_BASE_URL||'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neon.tech/ebnimaam/auth';
 
-async function proxy(req:Request,ctx:{params:Promise<{path:string[]}>}){
+async function proxy(req:Request,ctx:{params:{path:string[]}|Promise<{path:string[]}>}){
   const url=new URL(req.url);
   const {path=[]}=await ctx.params;
   const target=base.replace(/\/$/,'')+'/'+path.map(encodeURIComponent).join('/')+url.search;
