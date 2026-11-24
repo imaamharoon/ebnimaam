@@ -1,0 +1,22 @@
+import {NextResponse} from 'next/server';
+
+const base=process.env.NEON_AUTH_BASE_URL||'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neon.tech/ebnimaam/auth';
+
+async function proxy(req:Request,ctx:{params:{path:string[]}}){
+  const url=new URL(req.url);
+  const target=base.replace(/\/$/,'')+'/'+(ctx.params.path||[]).map(encodeURIComponent).join('/')+url.search;
+  const headers=new Headers();
+  for(const key of ['content-type','cookie','accept','user-agent']){const value=req.headers.get(key);if(value)headers.set(key,value)}
+  headers.set('origin','https://ebnimaam.vercel.app');
+  headers.set('x-forwarded-host',url.host);
+  const init:RequestInit={method:req.method,headers,redirect:'manual'};
+  if(!['GET','HEAD'].includes(req.method))init.body=await req.arrayBuffer();
+  try{
+    const upstream=await fetch(target,init);
+    const out=new NextResponse(upstream.body,{status:upstream.status});
+    for(const key of ['content-type','set-cookie','location','cache-control']){const value=upstream.headers.get(key);if(value)out.headers.set(key,value)}
+    out.headers.set('cache-control','no-store');
+    return out;
+  }catch{return NextResponse.json({error:'Authentication service is temporarily unavailable.'},{status:502})}
+}
+export const GET=proxy;export const POST=proxy;export const PUT=proxy;export const PATCH=proxy;export const DELETE=proxy;
