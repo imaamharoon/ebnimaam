@@ -7,6 +7,7 @@ on:
       - '.github/workflows/android-apk.yml'
       - 'public/**'
       - 'app/**'
+      - 'ebnimaam-logo.webp'
       - 'package.json'
       - 'package-lock.json'
   workflow_dispatch:
@@ -36,8 +37,22 @@ jobs:
           "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
       - name: Install web app dependencies
         run: npm install
-      - name: Install Capacitor tooling
-        run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+      - name: Install Capacitor tooling and icon generator
+        run: npm install --no-save --package-lock=false @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/assets sharp
+      - name: Prepare branded app icon from the supplied Ebnimaam logo
+        run: |
+          mkdir -p assets
+          node --input-type=module <<'NODE'
+          import sharp from 'sharp';
+          await sharp({
+            create: { width: 1024, height: 1024, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 0 } }
+          })
+            .composite([{ input: await sharp('ebnimaam-logo.webp').resize(760, 760, { fit: 'contain' }).png().toBuffer(), gravity: 'centre' }])
+            .png()
+            .toFile('assets/icon.png');
+          NODE
+      - name: Generate Android launcher icons
+        run: npx capacitor-assets generate --android
       - name: Generate Android wrapper
         run: npx cap add android
       - name: Build installable APK
