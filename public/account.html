@@ -17,5 +17,5 @@ async function signOut(){await fetch('/api/auth/sign-out',{method:'POST'});curre
 async function downloadData(){const data={account:{name:currentUser?.name,email:currentUser?.email},downloadedAt:new Date().toISOString()};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download='ebnimaam-account-information.json';a.click();URL.revokeObjectURL(a.href);notice('Your currently available account profile has been downloaded. Order history export will be added with the customer profile service.',true)}
 function deactivate(){notice('Account deactivation is being prepared. It is not active yet; please sign out for now.',true)}
 function deleteAccount(){notice('Permanent deletion is being prepared with identity confirmation and protection for legally required order/payment records. It is not active yet.',true)}
-checkSession();
+mode('in');
 </script></body></html>
