@@ -51,10 +51,10 @@ jobs:
             .png()
             .toFile('assets/icon.png');
           NODE
-      - name: Generate Android launcher icons
-        run: npx capacitor-assets generate --android
       - name: Generate Android wrapper
         run: npx cap add android
+      - name: Generate Android launcher icons
+        run: npx capacitor-assets generate --android
       - name: Build installable APK
         working-directory: android
         run: |
