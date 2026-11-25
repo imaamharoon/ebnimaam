@@ -35,15 +35,26 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   if (!isAdminRequest(req, secret)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
-    const result = await pool.query(
-      `SELECT o.reference,o.auth_user_id,o.customer_email,o.customer_name,o.customer_phone,o.address,
-              o.amount_kobo,o.currency,o.status,o.fulfilment_status,o.items,o.created_at,o.paid_at,
-              o.payment_provider,o.provider_transaction_id,o.updated_at,
-              COALESCE((SELECT json_agg(json_build_object('status',h.status,'note',h.note,'created_at',h.created_at)
-                ORDER BY h.created_at ASC) FROM public.ebnimaam_order_status_history h WHERE h.reference=o.reference),'[]'::json) AS history
-       FROM public.ebnimaam_orders o ORDER BY o.created_at DESC LIMIT 200`,
-    );
-    return NextResponse.json({ orders: result.rows }, { headers: { 'cache-control': 'no-store' } });
+    const [result, customerResult] = await Promise.all([
+      pool.query(
+        `SELECT o.reference,o.auth_user_id,o.customer_email,o.customer_name,o.customer_phone,o.address,
+                o.amount_kobo,o.currency,o.status,o.fulfilment_status,o.items,o.created_at,o.paid_at,
+                o.payment_provider,o.provider_transaction_id,o.updated_at,
+                COALESCE((SELECT json_agg(json_build_object('status',h.status,'note',h.note,'created_at',h.created_at)
+                  ORDER BY h.created_at ASC) FROM public.ebnimaam_order_status_history h WHERE h.reference=o.reference),'[]'::json) AS history
+         FROM public.ebnimaam_orders o ORDER BY o.created_at DESC LIMIT 200`,
+      ),
+      pool.query(
+        `SELECT LOWER(customer_email) AS email,MAX(customer_name) AS name,MAX(customer_phone) AS phone,
+                COUNT(*)::int AS order_count,
+                COUNT(*) FILTER (WHERE status='paid')::int AS paid_order_count,
+                COALESCE(SUM(amount_kobo) FILTER (WHERE status='paid'),0)::bigint AS paid_total_kobo,
+                MAX(created_at) AS last_order_at
+         FROM public.ebnimaam_orders WHERE customer_email IS NOT NULL AND customer_email<>''
+         GROUP BY LOWER(customer_email) ORDER BY last_order_at DESC LIMIT 500`,
+      ),
+    ]);
+    return NextResponse.json({ orders: result.rows, customers: customerResult.rows }, { headers: { 'cache-control': 'no-store' } });
   } catch {
     return NextResponse.json({ error: 'Orders unavailable.' }, { status: 503 });
   }
