@@ -16,6 +16,9 @@
 ## 2. Storefront, brand and customer experience
 - Professional home/store landing page, brand story, product collections, search, category filters, news/updates and promotional content.
 - Responsive mobile header, navigation/menu, account, search, cart and install affordance; avoid duplicate install controls.
+- The storefront and customer account must be one integrated experience: clicking Account opens a responsive in-site account panel, not a disconnected second website/page; sign-in, registration, profile and order history must be reachable and responsive from that panel.
+- Account access must visibly respond to clicks on desktop and mobile, support close/back behavior, and keep checkout sign-in within the same integrated storefront flow; preserve cart and return to checkout after successful sign-in.
+- Add and maintain owner-approved social/contact links, a working newsletter subscription flow only when its backend is connected, and customer support entry points; avoid inert buttons and placeholder alerts.
 - Product cards and detail experiences with photos, descriptions, category, price in NGN, variants/sizes and availability.
 - Wishlist/saved items and shopping lists where implemented; preserve cart contents across navigation and sign-in.
 - Product discovery/search, with image/voice search planned where supported and verified.
@@ -32,7 +35,7 @@
 - Email verification and OTP flows only where configured and actually supported. Do not claim phone/email ownership verification from the anti-bot challenge.
 - **New human-verification challenge at signup:** generate an unpredictable server-generated mixed alphanumeric code with a separator (example format `AV6-K9T2`, illustrative only), show it on the signup page, allow refresh and retry, validate server-side, expire promptly, use once only, bind to the signup session, and rate-limit attempts. Secure cookie signing, secrets and server checks required. Accessibility alternative required. This is anti-bot protection, not proof of email/phone ownership or a substitute for all security controls.
 - Account profile, contact details, address book, security preferences, account-linked order history, order tracking and privacy-aware account data export.
-- Account deletion/deactivation workflows must be real, secure, transparent and account-confirmed before they are offered as active features.
+- Account deletion/deactivation workflows must be real, secure, transparent and account-confirmed before they are offered as active features; export and deletion must not be represented as operational until verified.
 
 ## 4. Checkout, order creation and payment
 - Checkout requires a valid customer session; enforce this server-side and associate the order with that account.
