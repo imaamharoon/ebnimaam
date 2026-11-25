@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { Pool } from 'pg';
+import { checkRateLimit } from '../../../lib/rate-limit';
 
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
@@ -36,6 +37,14 @@ export async function POST(req: Request) {
     const sessionData = await session.json();
     const user = sessionData?.user;
     if (!user?.id || !user?.email || user.emailVerified !== true) return NextResponse.json({ error: 'Please verify your email address before checkout.' }, { status: 403 });
+
+    let checkoutAllowed = false;
+    try {
+      checkoutAllowed = await checkRateLimit(req, 'customer-checkout', 20, 15 * 60);
+    } catch {
+      return NextResponse.json({ error: 'Checkout is temporarily unavailable. Please try again shortly.' }, { status: 503 });
+    }
+    if (!checkoutAllowed) return NextResponse.json({ error: 'Too many checkout attempts. Please wait 15 minutes before trying again.' }, { status: 429, headers: { 'retry-after': '900' } });
 
     const body = await req.json();
     const address = body?.address || {};

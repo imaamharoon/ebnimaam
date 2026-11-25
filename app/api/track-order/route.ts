@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { checkRateLimit } from '../../../lib/rate-limit';
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 export async function POST(req: Request) {
+  let allowed = false;
+  try {
+    allowed = await checkRateLimit(req, 'order-track', 30, 15 * 60);
+  } catch {
+    return NextResponse.json({ error: 'Order tracking is temporarily unavailable. Please try again shortly.' }, { status: 503 });
+  }
+  if (!allowed) return NextResponse.json({ error: 'Too many order lookups. Please wait 15 minutes before trying again.' }, { status: 429, headers: { 'retry-after': '900' } });
   try {
     const body = await req.json();
     const reference = String(body?.reference || '').trim();
