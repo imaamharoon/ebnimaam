@@ -60,7 +60,7 @@ export async function POST(req: Request) {
   }
 }
 export async function DELETE(req: Request) {
-  if (!valid(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!isAdminRequest(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: 'Product ID is required.' }, { status: 400 });
