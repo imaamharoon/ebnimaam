@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid webhook body.' }, { status: 400 });
   }
 
-  if (event?.event !== 'charge.success') {
+  if (!['charge.success', 'charge.failed'].includes(String(event?.event || ''))) {
     return NextResponse.json({ received: true, ignored: true });
   }
 
