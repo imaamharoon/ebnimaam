@@ -87,7 +87,14 @@ export async function verifyAndReconcilePaystack(
       return { paid: false, reference, status: transactionStatus || 'unconfirmed', alreadyProcessed: false };
     }
 
-    const alreadyProcessed = order.status === 'paid' && Number(order.provider_transaction_id) === transactionId;
+    const alreadyProcessed = String(order.status || '').toLowerCase() === 'paid';
+    if (alreadyProcessed && !order.provider_transaction_id) {
+      // Older paid orders may predate transaction-ID persistence. Do not deduct stock again.
+      await client.query(
+        'UPDATE public.ebnimaam_orders SET provider_transaction_id=$1,payment_provider=$2,updated_at=NOW() WHERE reference=$3',
+        [transactionId, 'paystack', reference],
+      );
+    }
     let fulfilmentStatus = String(order.fulfilment_status || 'processing');
 
     if (!alreadyProcessed) {
