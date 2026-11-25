@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { verifyAndReconcilePaystack } from '@/lib/paystack-reconciliation';
+import { verifyAndReconcilePaystack } from '../../../lib/paystack-reconciliation';
 
 export const runtime = 'nodejs';
 
