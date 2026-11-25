@@ -13,7 +13,7 @@
 <p>Prices are displayed in Nigerian naira (₦ / NGN). Product descriptions, photographs, sizes, variants and stock information are provided to help you choose. We aim to keep them accurate, but colours may look different on different screens and stock can change. The server checks current product price and stock when an order is submitted. A product is not available for purchase while it is unpublished or out of stock.</p>
 <h2>4. Delivery charges</h2>
 <p>The current checkout delivery schedule is:</p>
-<ul><li>Plateau State: ₦1,500.</li><li>FCT (Abuja), Kano, Kaduna, Nasarawa and Bauchi: ₦3,500.</li><li>Lagos, Ogun, Oyo and Rivers: ₦4,500.</li><li>Other Nigerian states: ₦5,000.</li></ul>
+<ul id="deliveryFeeSchedule"><li>The applicable delivery fee for your selected Nigerian state is displayed in checkout before you pay.</li></ul>
 <p>The delivery fee applicable to your Nigerian address is shown in the checkout total before you are sent to Paystack. If the displayed fee or address is wrong, stop before paying and contact us. Delivery timing depends on stock, destination, courier availability and other operational conditions; any estimate supplied is not a guaranteed arrival date. We will contact you if a material fulfilment issue arises.</p>
 <h2>5. Orders and payment</h2>
 <p>Checkout is available only to signed-in customers. When you submit an order, the store creates a pending order and sends you to Paystack. <strong>An order is treated as paid only after the server verifies the matching Paystack transaction, amount, reference and NGN currency.</strong> An authorisation screen, bank debit notification or browser return alone is not proof that the order is confirmed. Do not send us card PINs, OTPs, passwords or full payment credentials.</p>
@@ -35,4 +35,6 @@
 <h2>13. Contact</h2>
 <p>For orders, delivery, payment or terms questions, email <a href="mailto:ebnimaam.com@gmail.com">ebnimaam.com@gmail.com</a> or WhatsApp <a href="https://wa.me/2348145672755">+234 814 567 2755</a>. Include your order reference where relevant.</p>
 <div class="footer"><a href="/privacy.html">Privacy policy</a> · <a href="/returns.html">Returns & refunds</a> · <a href="/store.html">Storefront</a></div>
-</main></body></html>
+</main><script>
+fetch('/api/store-settings',{cache:'no-store'}).then(r=>r.json()).then(data=>{const fees=data.settings&&data.settings.deliveryFeesByState;if(!fees)return;const list=document.getElementById('deliveryFeeSchedule');list.textContent='';const labels={'FCT - Abuja':'FCT (Abuja)','default':'All other Nigerian states'};Object.entries(fees).filter(([state])=>state!=='default').forEach(([state,amount])=>{const li=document.createElement('li');li.textContent=(labels[state]||state)+': ₦'+Number(amount).toLocaleString('en-NG');list.appendChild(li)});if(fees.default!==undefined){const li=document.createElement('li');li.textContent='All other Nigerian states: ₦'+Number(fees.default).toLocaleString('en-NG');list.appendChild(li)}}).catch(()=>{});
+</script></body></html>
