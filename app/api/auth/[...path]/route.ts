@@ -1,26 +1,14 @@
 import {NextResponse} from 'next/server';
-
-const base=process.env.NEON_AUTH_BASE_URL||'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neon.tech/ebnimaam/auth';
-
+import {createHmac,timingSafeEqual} from 'crypto';
+const base=process.env.NEON_AUTH_BASE_URL||'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neonauth.tech/ebnimaam/auth';
+const secret=()=>process.env.AUTH_SECRET||process.env.BETTER_AUTH_SECRET||process.env.NEON_AUTH_SECRET;
+const sign=(v:string,s:string)=>createHmac('sha256',s).update(v).digest('base64url');
+function verify(token:string,answer:string,s:string){try{const [payload,sig]=token.split('.');if(!payload||!sig)return false;const expected=sign(payload,s);if(sig.length!==expected.length||!timingSafeEqual(Buffer.from(sig),Buffer.from(expected)))return false;const data=JSON.parse(Buffer.from(payload,'base64url').toString());return data.exp>Date.now()&&String(data.code).toUpperCase()===answer.trim().toUpperCase()}catch{return false}}
 async function proxy(req:Request,ctx:{params:{path:string[]}|Promise<{path:string[]}>}){
-  const url=new URL(req.url);
-  const {path=[]}=await ctx.params;
-  const target=base.replace(/\/$/,'')+'/'+path.map(encodeURIComponent).join('/')+url.search;
-  const headers=new Headers();
-  for(const key of ['content-type','cookie','accept','user-agent']){const value=req.headers.get(key);if(value)headers.set(key,value)}
-  headers.set('origin',url.origin);
-  headers.set('x-forwarded-host',url.host);
-  headers.set('x-forwarded-proto',url.protocol.replace(':',''));
-  const init:RequestInit={method:req.method,headers,redirect:'manual'};
-  if(!['GET','HEAD'].includes(req.method))init.body=await req.arrayBuffer();
-  try{
-    const upstream=await fetch(target,init);
-    const out=new NextResponse(upstream.body,{status:upstream.status});
-    for(const key of ['content-type','location','cache-control']){const value=upstream.headers.get(key);if(value)out.headers.set(key,value)}
-    const cookies=(upstream.headers as any).getSetCookie?.()||[];
-    for(const cookie of cookies){const local=cookie.replace(/;\s*Domain=[^;]*/ig,'').replace(/;\s*Path=[^;]*/ig,'; Path=/');out.headers.append('set-cookie',local)}
-    out.headers.set('cache-control','no-store');
-    return out;
-  }catch{return NextResponse.json({error:'Authentication service is temporarily unavailable.'},{status:502})}
+ const url=new URL(req.url);const {path=[]}=await ctx.params;const signup=req.method==='POST'&&path.join('/')==='sign-up/email';
+ let body:BodyInit|undefined;if(!['GET','HEAD'].includes(req.method)){body=await req.arrayBuffer()}
+ let answer='';if(signup){const s=secret(),token=req.headers.get('cookie')?.split(';').map(x=>x.trim()).find(x=>x.startsWith('ebnimaam_signup_challenge='))?.split('=').slice(1).join('=');try{const parsed=JSON.parse(Buffer.from(body as ArrayBuffer).toString());answer=String(parsed.challengeAnswer||'');delete parsed.challengeAnswer;body=Buffer.from(JSON.stringify(parsed))}catch{}if(!s||!token||!verify(decodeURIComponent(token),answer,s)){return NextResponse.json({error:'Human verification failed or expired. Refresh the challenge and try again.'},{status:400})}}
+ const target=base.replace(/\/$/,'')+'/'+path.map(encodeURIComponent).join('/')+url.search;const headers=new Headers();for(const key of ['content-type','cookie','accept','user-agent']){const value=req.headers.get(key);if(value)headers.set(key,value)}headers.set('origin',url.origin);headers.set('x-forwarded-host',url.host);headers.set('x-forwarded-proto',url.protocol.replace(':',''));const init:RequestInit={method:req.method,headers,redirect:'manual'};if(body!==undefined)init.body=body;
+ try{const upstream=await fetch(target,init);const out=new NextResponse(upstream.body,{status:upstream.status});for(const key of ['content-type','location','cache-control']){const value=upstream.headers.get(key);if(value)out.headers.set(key,value)}const cookies=(upstream.headers as any).getSetCookie?.()||[];for(const cookie of cookies){const local=cookie.replace(/;\s*Domain=[^;]*/ig,'').replace(/;\s*Path=[^;]*/ig,'; Path=/');out.headers.append('set-cookie',local)}if(signup)out.cookies.set('ebnimaam_signup_challenge','',{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'strict',path:'/api/auth/sign-up/email',maxAge:0});out.headers.set('cache-control','no-store');return out}catch{return NextResponse.json({error:'Authentication service is temporarily unavailable.'},{status:502})}
 }
 export const GET=proxy;export const POST=proxy;export const PUT=proxy;export const PATCH=proxy;export const DELETE=proxy;
