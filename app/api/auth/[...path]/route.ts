@@ -23,9 +23,13 @@ async function proxy(req: Request, ctx: { params: { path: string[] } | Promise<{
   const endpoint = path.join('/');
   const signup = req.method === 'POST' && endpoint === 'sign-up/email';
   const signin = req.method === 'POST' && endpoint === 'sign-in/email';
-  if (signup || signin) {
+  const otpSend = req.method === 'POST' && endpoint === 'email-otp/send-verification-otp';
+  const otpVerify = req.method === 'POST' && endpoint === 'email-otp/verify-email';
+  if (signup || signin || otpSend || otpVerify) {
     try {
-      const allowed = await checkRateLimit(req, signup ? 'auth-signup' : 'auth-signin', signup ? 5 : 20, 15 * 60);
+      const scope = signup ? 'auth-signup' : signin ? 'auth-signin' : otpSend ? 'email-otp-send' : 'email-otp-verify';
+      const limit = signup ? 5 : signin ? 20 : otpSend ? 5 : 10;
+      const allowed = await checkRateLimit(req, scope, limit, 15 * 60);
       if (!allowed) return NextResponse.json({ error: 'Too many attempts. Please wait 15 minutes before trying again.' }, { status: 429, headers: { 'retry-after': '900' } });
     } catch {
       return NextResponse.json({ error: 'Authentication is temporarily unavailable. Please try again shortly.' }, { status: 503 });
