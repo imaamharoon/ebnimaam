@@ -17,7 +17,10 @@ export async function POST(req: Request) {
     const email = String(body?.email || '').trim();
     if (!reference || !email) return NextResponse.json({ error: 'Order reference and email are required.' }, { status: 400 });
     const result = await pool.query(
-      `SELECT o.reference,o.customer_email,o.amount_kobo,o.currency,o.status,o.fulfilment_status,o.created_at,o.paid_at,
+      `SELECT o.reference,o.customer_email,o.amount_kobo,o.currency,o.status,
+              CASE WHEN LOWER(o.status)<>'paid' AND o.fulfilment_status IN ('picked','packed','shipped','delivered')
+                   THEN 'awaiting_payment' ELSE o.fulfilment_status END AS fulfilment_status,
+              o.created_at,o.paid_at,
               COALESCE((SELECT json_agg(json_build_object('status',h.status,'note',h.note,'created_at',h.created_at) ORDER BY h.created_at ASC)
                 FROM public.ebnimaam_order_status_history h WHERE h.reference=o.reference),'[]'::json) AS history
        FROM public.ebnimaam_orders o WHERE o.reference=$1 AND LOWER(o.customer_email)=LOWER($2)`,
