@@ -1,1 +1,18 @@
-import {NextResponse} from 'next/server';import {Pool} from 'pg';const pool=new Pool({connectionString:process.env.DATABASE_URL});export async function POST(req:Request){try{const {reference}=await req.json();if(!reference||!process.env.PAYSTACK_SECRET_KEY||!process.env.DATABASE_URL)return NextResponse.json({error:'Verification unavailable.'},{status:400});const r=await fetch('https://api.paystack.co/transaction/verify/'+encodeURIComponent(String(reference)),{headers:{Authorization:'Bearer '+process.env.PAYSTACK_SECRET_KEY}});const d=await r.json();if(!r.ok||!d.status||d.data?.status!=='success'||d.data?.reference!==reference)return NextResponse.json({paid:false},{status:400});const amount=Number(d.data.amount);const u=await pool.query('UPDATE ebnimaam_orders SET status=$1,paid_at=NOW() WHERE reference=$2 AND amount_kobo=$3 AND status<>$1 RETURNING reference,items',[ 'paid',reference,amount]);if(u.rowCount){const paidItems=Array.isArray(u.rows[0].items)?u.rows[0].items:JSON.parse(u.rows[0].items||'[]');for(const item of paidItems){await pool.query('UPDATE ebnimaam_products SET stock=GREATEST(0,stock-$1),updated_at=NOW() WHERE id=$2',[Math.max(1,Number(item.qty)||1),String(item.productId)]).catch(()=>{})}}if(!u.rowCount){const c=await pool.query('SELECT status FROM ebnimaam_orders WHERE reference=$1 AND amount_kobo=$2',[reference,amount]);if(!c.rowCount||c.rows[0].status!=='paid')return NextResponse.json({paid:false},{status:400});}return NextResponse.json({paid:true,reference});}catch{return NextResponse.json({error:'Verification failed.'},{status:500})}}
+import { NextResponse } from 'next/server';
+import { verifyAndReconcilePaystack } from '@/lib/paystack-reconciliation';
+
+export const runtime = 'nodejs';
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const reference = String(body?.reference || '').trim();
+    if (!reference) return NextResponse.json({ error: 'A payment reference is required.' }, { status: 400 });
+    const result = await verifyAndReconcilePaystack(reference);
+    return NextResponse.json(result);
+  } catch (error: any) {
+    const message = String(error?.message || 'Payment verification is temporarily unavailable.');
+    const status = message.includes('not found') ? 404 : message.includes('not configured') ? 503 : 400;
+    return NextResponse.json({ paid: false, error: message }, { status });
+  }
+}
