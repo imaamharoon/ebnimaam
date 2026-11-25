@@ -191,3 +191,10 @@ This addendum supersedes the older deployment statement in section 13 and record
 - Do not infer that any of those four pending orders was paid from the separate inbox receipt. Reconcile the email reference against the Paystack merchant transaction dashboard/API and the associated original checkout before making any order/payment database correction.
 - No payment, order, status, stock, refund or customer row was changed during this investigation. No Paystack configuration was changed and no charge was initiated.
 - Slack search for the Ebnimaam project returned no matching messages in the connected workspace search scope. No relevant project decision or product-inventory approval was found in the Gmail results reviewed.
+
+
+## 17. Pending-order evidence check — 25 November 2026, 19:39 UTC
+
+- Searched the connected Gmail account for each of the four current database order references. No matching email threads were returned for any of the four references.
+- The only Paystack email pair found in the reviewed date window uses a different reference, documented in section 16. It does not establish payment for any current pending order.
+- Keep the four orders unchanged and pending until verified against Paystack's transaction records and the original customer checkout. The database status and fulfillment mismatch is not evidence that the orders were paid or legitimately delivered.
