@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { randomBytes, randomInt, createHmac } from 'crypto';
-import { checkRateLimit } from '@/lib/rate-limit';
+import { checkRateLimit } from '../../../lib/rate-limit';
 export const runtime = 'nodejs';
 const secret = () => process.env.AUTH_SECRET || process.env.BETTER_AUTH_SECRET || process.env.NEON_AUTH_SECRET;
 const sign = (value: string, key: string) => createHmac('sha256', key).update(value).digest('base64url');
