@@ -1,19 +1,10 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { createHmac, timingSafeEqual, randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
+import { isAdminRequest } from '@/lib/admin-auth';
 
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
-const secret = process.env.ADMIN_PASSWORD || '';
-
-function valid(req: Request) {
-  const match = (req.headers.get('cookie') || '').match(/ebn_admin=([^;]+)/);
-  if (!match || !secret) return false;
-  const expected = createHmac('sha256', secret).update('ebnimaam-admin-session').digest('hex');
-  const supplied = Buffer.from(match[1]);
-  const expectedBytes = Buffer.from(expected);
-  return supplied.length === expectedBytes.length && timingSafeEqual(supplied, expectedBytes);
-}
 async function init() {
   await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_products(
     id TEXT PRIMARY KEY,name TEXT NOT NULL,category TEXT NOT NULL,price INTEGER NOT NULL,
@@ -24,7 +15,7 @@ async function init() {
 export async function GET(req: Request) {
   try {
     await init();
-    const admin = valid(req);
+    const admin = isAdminRequest(req);
     const result = admin
       ? await pool.query('SELECT id,name,category,price,description,image,tag,sizes,stock,is_active,updated_at FROM public.ebnimaam_products ORDER BY updated_at DESC')
       : await pool.query('SELECT id,name,category,price,description,image,tag,sizes,stock,is_active,updated_at FROM public.ebnimaam_products WHERE is_active=TRUE AND stock>0 ORDER BY updated_at DESC');
@@ -34,7 +25,7 @@ export async function GET(req: Request) {
   }
 }
 export async function POST(req: Request) {
-  if (!valid(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!isAdminRequest(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     await init();
     const product = await req.json();
