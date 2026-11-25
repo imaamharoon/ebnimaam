@@ -115,3 +115,26 @@ Run and record evidence for:
 
 ---
 **Owner exclusions and safeguards:** Nigeria-only launch; Paystack only; no guest checkout; no Facebook/social login; no SMS/WhatsApp automated messages; do not perform live payment charges; preserve working payment configuration.
+
+## 13. Verification snapshot — 25 November 2026
+This status snapshot records what has actually been checked. It supersedes any assumption that a code change alone constitutes a complete launch.
+
+### Verified in the current GitHub preview branch
+- The latest source at the time of this snapshot passed a local Next.js production build in the connected Vercel build sandbox: compilation, TypeScript checks and static page generation completed.
+- The Android GitHub Actions workflow was changed to run on `main` and `preview/mobile-header-refine`. Run `45676696213` completed successfully for commit `9fe49154488a1b49df7af40fb3eeb8711cdbbd18`; its APK asset was published as release `android-apk-44`.
+- Account panel, database catalogue, cart restoration, server-side checkout, signup challenge, OTP verification UI, admin session, Paystack verification/webhook code and policy pages are implemented in the branch.
+- Neon main branch has the required Ebnimaam order, product, payment-event, status-history, customer-profile, news, store-settings and rate-limit tables.
+- Neon Auth is configured to require email verification and use email OTP. The production Vercel environment has an `AUTH_SECRET`.
+- The privacy, returns and terms documents are present in the branch. Returns wording references FCCPA section 122 and does not impose an arbitrary short deadline that could remove statutory rights.
+
+### Not verified or currently blocked
+- **Deployment:** the newest source is not deployed to Vercel production. Vercel's deployment API returned the Free-plan daily deployment quota error. The production alias still points to the older deployment at commit `04bce47963f56c6637f113693098b635585c72a2`. Do not claim the new website or Android wrapper is live until a deployment of the new commit is READY and its production domain is checked.
+- **Registration:** Neon Auth currently has zero user records. No real customer registration or email OTP delivery test has been completed. Neon is using its shared sender; dedicated SMTP credentials and a confirmed delivery test are still required before public sign-up can be accepted as verified.
+- **Catalogue:** the database currently has one legacy/test product record, zero published products and zero sale-ready active catalogue items. Keep that record hidden. The owner must confirm real merchandise, prices, sizes/variants, images and physical quantities before publishing products.
+- **Payments:** no real charges were made. The current order table has four pending records and no paid orders; the payment-event and status-history tables currently contain no rows. The new Paystack verification, webhook signature and reconciliation code passed compilation but has not been exercised against a test transaction. Confirm the webhook URL in the Paystack dashboard before relying on asynchronous webhook delivery. Preserve the active Paystack configuration.
+- **Refunds:** the returns policy describes a human-approved refund process; an automated refund API is not implemented or verified.
+- **Production customer journey:** account registration/verification, login, mobile account panel, cart-to-checkout return, order creation/tracking, admin persistence and PWA behavior must be exercised end-to-end against the deployed release before launch.
+- **APK:** release `android-apk-44` is a successful debug APK from the preview branch, but its Capacitor configuration loads `https://ebnimaam.vercel.app/store.html`. Until the new website is deployed to that production URL, the APK displays the older production website. It is not a Play Store-signed release.
+
+### Release rule
+Keep these gates open until their evidence is attached to the actual candidate deployment. A successful build or APK workflow is not proof that customer registration, email delivery, Paystack reconciliation, live inventory, production launch or installed-app behavior has passed.
