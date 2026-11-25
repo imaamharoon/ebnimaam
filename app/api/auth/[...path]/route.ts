@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {createHmac,timingSafeEqual} from 'crypto';
-const base=process.env.NEON_AUTH_BASE_URL||'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neonauth.tech/ebnimaam/auth';
+const base=process.env.NEON_AUTH_BASE_URL||'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neon.tech/ebnimaam/auth';
 const secret=()=>process.env.AUTH_SECRET||process.env.BETTER_AUTH_SECRET||process.env.NEON_AUTH_SECRET;
 const sign=(v:string,s:string)=>createHmac('sha256',s).update(v).digest('base64url');
 function verify(token:string,answer:string,s:string){try{const [payload,sig]=token.split('.');if(!payload||!sig)return false;const expected=sign(payload,s);if(sig.length!==expected.length||!timingSafeEqual(Buffer.from(sig),Buffer.from(expected)))return false;const data=JSON.parse(Buffer.from(payload,'base64url').toString());return data.exp>Date.now()&&String(data.code).toUpperCase()===answer.trim().toUpperCase()}catch{return false}}
