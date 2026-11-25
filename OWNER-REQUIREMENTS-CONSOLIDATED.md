@@ -55,3 +55,11 @@ This document consolidates the owner requirements gathered from the conversation
 - Test registration, login, remember-me, forgot-password email, verification, profile/address save, mandatory-account checkout, cart restore, tracking, admin CRUD, catalogue sync, settings persistence, mobile navigation/install and order lifecycle.
 - Do not publish to production before owner testing and approval.
 - Payment section is not the focus of this update and Paystack should remain intact.
+
+
+## Signup anti-bot security challenge (new owner requirement)
+- Offer an on-page human-verification challenge during account creation (CAPTCHA-style) for customers who prefer not to receive an OTP at signup. Example challenge format: mixed uppercase letters and digits with a separator, such as `AV6-K9T2`; this is illustrative only, never a fixed shared code.
+- Generate a fresh, unpredictable challenge on the server; display it clearly and allow refresh/retry. The user enters the displayed challenge to proceed.
+- Validate only server-side; challenge must expire quickly, be single-use, and be tied to the signup session; limit attempts and rate-limit signup/challenge endpoints; avoid logging or exposing challenge secrets.
+- Provide an accessible alternative for users who cannot read the visual challenge (e.g. audio/accessibility alternative or a reputable CAPTCHA alternative). Don't treat this challenge as email/phone ownership verification or as a complete security guarantee.
+- Test challenge generation, refresh, expiry, single-use behavior, failed attempts, accessibility, and account creation flow.
