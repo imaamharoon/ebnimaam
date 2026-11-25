@@ -1,1 +1,140 @@
-import {NextResponse} from 'next/server';import {Pool} from 'pg';const pool=new Pool({connectionString:process.env.DATABASE_URL});const products:any={'p-1':28000,'p-2':18500,'p-3':9500,'p-4':32000,'p-5':12000,'p-6':15000};function delivery(state:string,country:string){if(country==='Other'||state==='International')return 35000;if(state==='Plateau')return 1500;if(['Kano','Kaduna','FCT - Abuja','Nasarawa','Bauchi'].includes(state))return 3500;if(['Lagos','Ogun','Oyo','Rivers'].includes(state))return 4500;return 5000}export async function POST(req:Request){try{if(!process.env.PAYSTACK_SECRET_KEY||!process.env.DATABASE_URL)return NextResponse.json({error:'Payment setup is incomplete.'},{status:503});const cookie=req.headers.get('cookie')||'';if(!cookie)return NextResponse.json({error:'Sign in is required before checkout.'},{status:401});const authBase=(process.env.NEON_AUTH_BASE_URL||'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neon.tech/ebnimaam/auth').replace(/\/$/,'');const session=await fetch(authBase+'/get-session',{headers:{cookie,origin:new URL(req.url).origin},cache:'no-store'});if(!session.ok)return NextResponse.json({error:'Please sign in before checkout.'},{status:401});const sess=await session.json();if(!sess?.user?.email)return NextResponse.json({error:'Please sign in before checkout.'},{status:401});const body=await req.json();const email=String(sess.user.email||'').trim();if(String(body?.address?.country||'Nigeria')!=='Nigeria'||!body?.address?.state||!body?.address?.city||!body?.address?.street)return NextResponse.json({error:'A complete Nigerian delivery address is required.'},{status:400});if(!email.includes('@'))return NextResponse.json({error:'Valid email required.'},{status:400});if(!Array.isArray(body.items)||!body.items.length)return NextResponse.json({error:'Cart is empty.'},{status:400});let subtotal=0;const requested=Array.from(new Set(body.items.map((i:any)=>String(i.productId))));const livePrices:any={};if(requested.length){const live=await pool.query('SELECT id,price,stock FROM ebnimaam_products WHERE id = ANY($1::text[])',[requested]);for(const row of live.rows){livePrices[row.id]=Number(row.price);const requestedItem=body.items.find((i:any)=>String(i.productId)===String(row.id));if(requestedItem&&Number(requestedItem.qty)>Number(row.stock||0))throw new Error('Insufficient stock for '+row.id)}}const items=body.items.map((i:any)=>{const id=String(i.productId);const price=Object.prototype.hasOwnProperty.call(livePrices,id)?livePrices[id]:products[id];const qty=Math.max(1,Math.min(10,Math.floor(Number(i.qty)||1)));if(!Number.isFinite(price)||price<=0)throw new Error('Invalid product.');subtotal+=price*qty;return {productId:id,qty,price}});if(String(body.promoCode||'').trim().toUpperCase()==='EBN10')subtotal=Math.round(subtotal*.9);const ship=delivery(String(body.address?.state||''),String(body.address?.country||'Nigeria'));const amount=subtotal+ship;const reference='EBN-'+crypto.randomUUID();await pool.query(`CREATE TABLE IF NOT EXISTS ebnimaam_orders (id BIGSERIAL PRIMARY KEY, reference TEXT UNIQUE NOT NULL, customer_email TEXT NOT NULL, customer_name TEXT, customer_phone TEXT, address JSONB, amount_kobo BIGINT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', fulfilment_status TEXT NOT NULL DEFAULT 'processing', items JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),paid_at TIMESTAMPTZ)`);await pool.query('INSERT INTO ebnimaam_orders(reference,customer_email,customer_name,customer_phone,address,amount_kobo,items) VALUES($1,$2,$3,$4,$5,$6,$7)',[reference,email,String(body.customer.name||''),String(body.customer.phone||''),{...(body.address||{}),delivery_fee:ship,subtotal},amount*100,JSON.stringify(items)]);const response=await fetch('https://api.paystack.co/transaction/initialize',{method:'POST',headers:{Authorization:'Bearer '+process.env.PAYSTACK_SECRET_KEY,'Content-Type':'application/json'},body:JSON.stringify({email,amount:amount*100,reference,metadata:{order_reference:reference,delivery_fee:ship,subtotal},callback_url:new URL('/payment-return.html',req.url).toString()})});const data=await response.json();if(!response.ok||!data.status){await pool.query('UPDATE ebnimaam_orders SET status=$1 WHERE reference=$2',['initialization_failed',reference]).catch(()=>{});throw new Error(data.message||'Payment initialization failed');}return NextResponse.json({authorization_url:data.data.authorization_url,reference});}catch(e:any){return NextResponse.json({error:e.message||'Payment initialization failed.'},{status:500})}}
+import { NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
+import { Pool } from 'pg';
+
+export const runtime = 'nodejs';
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
+const authBase = (process.env.NEON_AUTH_BASE_URL || 'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neon.tech/ebnimaam/auth').replace(/\/$/, '');
+
+const deliveryFees: Record<string, number> = {
+  Plateau: 1500,
+  'FCT - Abuja': 3500, Kano: 3500, Kaduna: 3500, Nasarawa: 3500, Bauchi: 3500,
+  Lagos: 4500, Ogun: 4500, Oyo: 4500, Rivers: 4500,
+};
+const states = new Set([
+  'Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno','Cross River','Delta','Ebonyi',
+  'Edo','Ekiti','Enugu','FCT - Abuja','Gombe','Imo','Jigawa','Kaduna','Kano','Katsina','Kebbi','Kogi',
+  'Kwara','Lagos','Nasarawa','Niger','Ogun','Ondo','Osun','Oyo','Plateau','Rivers','Sokoto','Taraba','Yobe','Zamfara'
+]);
+function delivery(state: string) { return deliveryFees[state] ?? 5000; }
+
+export async function POST(req: Request) {
+  let reference = '';
+  try {
+    if (!process.env.PAYSTACK_SECRET_KEY || !process.env.DATABASE_URL) {
+      return NextResponse.json({ error: 'Checkout is temporarily unavailable.' }, { status: 503 });
+    }
+
+    const cookie = req.headers.get('cookie') || '';
+    if (!cookie) return NextResponse.json({ error: 'Sign in is required before checkout.' }, { status: 401 });
+    const origin = new URL(req.url).origin;
+    const session = await fetch(authBase + '/get-session', {
+      headers: { cookie, origin },
+      cache: 'no-store',
+    });
+    if (!session.ok) return NextResponse.json({ error: 'Please sign in before checkout.' }, { status: 401 });
+    const sessionData = await session.json();
+    const user = sessionData?.user;
+    if (!user?.id || !user?.email) return NextResponse.json({ error: 'Please sign in before checkout.' }, { status: 401 });
+
+    const body = await req.json();
+    const address = body?.address || {};
+    const country = String(address.country || 'Nigeria').trim();
+    const state = String(address.state || '').trim();
+    const city = String(address.city || '').trim();
+    const street = String(address.street || '').trim();
+    if (country !== 'Nigeria' || !states.has(state) || !city || !street) {
+      return NextResponse.json({ error: 'A complete Nigerian delivery address is required. International orders are not available.' }, { status: 400 });
+    }
+    if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 30) {
+      return NextResponse.json({ error: 'Your cart is empty or contains too many items.' }, { status: 400 });
+    }
+
+    const requested = body.items.map((item: any) => ({
+      productId: String(item?.productId || '').trim(),
+      size: String(item?.size || '').trim().slice(0, 40),
+      qty: Number(item?.qty),
+    }));
+    if (requested.some((item) => !item.productId || !Number.isSafeInteger(item.qty) || item.qty < 1 || item.qty > 10)) {
+      return NextResponse.json({ error: 'Please check the quantities in your cart.' }, { status: 400 });
+    }
+    if (new Set(requested.map((item) => item.productId)).size !== requested.length) {
+      return NextResponse.json({ error: 'Remove duplicate product lines and try again.' }, { status: 400 });
+    }
+
+    const productIds = requested.map((item) => item.productId);
+    const live = await pool.query(
+      'SELECT id,name,price,stock FROM public.ebnimaam_products WHERE id = ANY($1::text[]) AND is_active = TRUE',
+      [productIds],
+    );
+    if (live.rowCount !== requested.length) {
+      return NextResponse.json({ error: 'One or more products are no longer available. Refresh the shop and try again.' }, { status: 409 });
+    }
+
+    const catalog = new Map(live.rows.map((row: any) => [String(row.id), row]));
+    let subtotal = 0;
+    const items = requested.map((item) => {
+      const product: any = catalog.get(item.productId);
+      if (!product || Number(product.price) <= 0) throw new Error('A cart product has an invalid price.');
+      if (item.qty > Number(product.stock || 0)) throw new Error('There is not enough stock for ' + String(product.name) + '.');
+      subtotal += Number(product.price) * item.qty;
+      return { productId: item.productId, name: String(product.name), size: item.size, qty: item.qty, price: Number(product.price) };
+    });
+
+    const promoCode = String(body?.promoCode || '').trim().toUpperCase();
+    const discount = promoCode === 'EBN10' ? Math.round(subtotal * 0.10) : 0;
+    const deliveryFee = delivery(state);
+    const amountNaira = subtotal - discount + deliveryFee;
+    if (!Number.isSafeInteger(amountNaira) || amountNaira <= 0) throw new Error('The checkout total is invalid.');
+    const amountKobo = amountNaira * 100;
+    if (!Number.isSafeInteger(amountKobo)) throw new Error('The checkout total is too large.');
+
+    reference = 'EBN-' + randomUUID();
+    await pool.query(
+      `INSERT INTO public.ebnimaam_orders
+       (reference,auth_user_id,customer_email,customer_name,customer_phone,address,amount_kobo,currency,status,fulfilment_status,items,payment_provider,created_at,updated_at)
+       VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,'NGN','pending','processing',$8::jsonb,'paystack',NOW(),NOW())`,
+      [
+        reference, String(user.id), String(user.email).trim().toLowerCase(),
+        String(body?.customer?.name || user.name || '').trim().slice(0, 120),
+        String(body?.customer?.phone || '').trim().slice(0, 40),
+        JSON.stringify({ country: 'Nigeria', state, city, street, postal: String(address.postal || '').slice(0, 30), delivery_fee: deliveryFee, subtotal, discount, promo_code: discount ? promoCode : null }),
+        amountKobo, JSON.stringify(items),
+      ],
+    );
+    await pool.query(
+      'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
+      [reference, 'pending', 'Order created; awaiting Paystack confirmation.', String(user.id)],
+    );
+
+    const paymentResponse = await fetch('https://api.paystack.co/transaction/initialize', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + process.env.PAYSTACK_SECRET_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: String(user.email).trim(),
+        amount: amountKobo,
+        reference,
+        metadata: { order_reference: reference, delivery_fee: deliveryFee, subtotal, discount },
+        callback_url: new URL('/payment-return.html', req.url).toString(),
+      }),
+      cache: 'no-store',
+    });
+    const paymentData = await paymentResponse.json().catch(() => null);
+    if (!paymentResponse.ok || !paymentData?.status || !paymentData?.data?.authorization_url) {
+      const message = String(paymentData?.message || 'Paystack could not initialize this payment.');
+      await pool.query(
+        'UPDATE public.ebnimaam_orders SET status=$1,updated_at=NOW() WHERE reference=$2',
+        ['initialization_failed', reference],
+      );
+      await pool.query(
+        'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
+        [reference, 'initialization_failed', message.slice(0, 500), 'paystack'],
+      );
+      return NextResponse.json({ error: message }, { status: 502 });
+    }
+
+    return NextResponse.json({ authorization_url: paymentData.data.authorization_url, reference });
+  } catch (error: any) {
+    return NextResponse.json({ error: error?.message || 'Payment initialization failed.' }, { status: reference ? 502 : 400 });
+  }
+}
