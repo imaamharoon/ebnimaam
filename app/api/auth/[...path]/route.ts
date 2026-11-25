@@ -50,7 +50,9 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
       body = Buffer.from(JSON.stringify(parsed));
     } catch { return NextResponse.json({ error: 'Please complete the human verification challenge.' }, { status: 400 }); }
     if (!key || !token || !verifyChallenge(decodeURIComponent(token), answer, key)) {
-      return NextResponse.json({ error: 'Human verification failed or expired. Refresh the challenge and try again.' }, { status: 400 });
+      const failed = NextResponse.json({ error: 'Human verification failed or expired. Refresh the challenge and try again.' }, { status: 400 });
+      failed.cookies.set('ebnimaam_signup_challenge', '', { httpOnly: true, secure: url.protocol === 'https:', sameSite: 'strict', path: '/api/auth/sign-up/email', maxAge: 0 });
+      return failed;
     }
   }
 
@@ -90,7 +92,9 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
     response.headers.set('cache-control', 'no-store');
     return response;
   } catch {
-    return NextResponse.json({ error: 'Authentication service is temporarily unavailable.' }, { status: 502 });
+    const failed = NextResponse.json({ error: 'Authentication service is temporarily unavailable.' }, { status: 502 });
+    if (signup) failed.cookies.set('ebnimaam_signup_challenge', '', { httpOnly: true, secure: url.protocol === 'https:', sameSite: 'strict', path: '/api/auth/sign-up/email', maxAge: 0 });
+    return failed;
   }
 }
 export const GET = proxy;
