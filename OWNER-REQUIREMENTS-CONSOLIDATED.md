@@ -198,3 +198,13 @@ This addendum supersedes the older deployment statement in section 13 and record
 - Searched the connected Gmail account for each of the four current database order references. No matching email threads were returned for any of the four references.
 - The only Paystack email pair found in the reviewed date window uses a different reference, documented in section 16. It does not establish payment for any current pending order.
 - Keep the four orders unchanged and pending until verified against Paystack's transaction records and the original customer checkout. The database status and fulfillment mismatch is not evidence that the orders were paid or legitimately delivered.
+
+
+## 18. Latest endpoint hardening and CI verification — 25 November 2026, 19:45 UTC
+
+- Source commit `d8744321e6c342a3f22fec6ce6e4a48e0912af60` adds server-side limits of 20 checkout initializations per client IP per 15 minutes and 30 public order lookups per client IP per 15 minutes. Excess requests receive HTTP 429 with a 15-minute retry hint; if the rate-limit store is unavailable, the endpoints fail closed with HTTP 503.
+- Source commit `c39dd3ba4682cad3e997a6d918918cbd169d5b29` prevents public order tracking from displaying picked/packed/shipped/delivered milestones when payment is not verified as paid. It returns `awaiting_payment` instead. The account's tracking display in commit `1587731e78107b91f18306dd7b388c54da60b788` renders this as “Awaiting payment”.
+- A read-only check against the current four database rows confirmed the customer-visible mapping: the three unpaid delivered/packed/shipped records resolve to `awaiting_payment`; the cancelled row remains `cancelled`. No stored order fields were modified.
+- The Android workflow now runs `npm run build` as a Next.js production-build verification step before generating the APK. Run 49 (workflow commit `bbbce2c8b36bc5978b351b1d4b021389bfc73105`) completed the Next.js build step successfully; run 50 (latest storefront account-label commit `1587731e78107b91f18306dd7b388c54da60b788`) has also completed its Next.js production-build step successfully. Android APK packaging/publishing was still running at the time of this note.
+- The current official production `/api/products` endpoint responds HTTP 200 with an empty `products` array. There are no approved active, in-stock products to show to customers.
+- Current candidate branch head is `1587731e78107b91f18306dd7b388c54da60b788`. Neither this code nor the later documentation-only commits have been deployed to the official Vercel project; the existing production domain remains on commit `9ad166d` pending the Free-plan deployment quota reset or a separately authorized hosting-plan change.
