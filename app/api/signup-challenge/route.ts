@@ -8,7 +8,7 @@ export async function GET(){
  const pick=(n:number)=>Array.from({length:n},()=>chars[randomBytes(1)[0]%chars.length]).join('');
  const code=pick(3)+'-'+pick(4),payload=Buffer.from(JSON.stringify({code,exp:Date.now()+5*60*1000,nonce:randomBytes(16).toString('hex')})).toString('base64url');
  const token=payload+'.'+sign(payload,s);
- const res=NextResponse.json({challenge:code,expiresIn:300},{headers:{'cache-control':'no-store'});
+ const res=NextResponse.json({challenge:code,expiresIn:300},{headers:{'cache-control':'no-store'}});
  res.cookies.set('ebnimaam_signup_challenge',token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'strict',path:'/api/auth/sign-up/email',maxAge:300});
  return res;
 }
