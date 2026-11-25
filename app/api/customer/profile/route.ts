@@ -10,7 +10,7 @@ async function customer(req: Request) {
   if (!response.ok) return null;
   const data = await response.json();
   const user = data?.user;
-  if (!user?.id || !user?.email || user.emailVerified === false) return null;
+  if (!user?.id || !user?.email || user.emailVerified !== true) return null;
   return user as { id: string; email: string; name?: string; emailVerified?: boolean };
 }
 async function init() {
