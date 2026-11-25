@@ -138,3 +138,39 @@ This status snapshot records what has actually been checked. It supersedes any a
 
 ### Release rule
 Keep these gates open until their evidence is attached to the actual candidate deployment. A successful build or APK workflow is not proof that customer registration, email delivery, Paystack reconciliation, live inventory, production launch or installed-app behavior has passed.
+
+
+## 14. Release audit addendum — 25 November 2026, 19:34 UTC
+
+This addendum supersedes the older deployment statement in section 13 and records the latest source, production, database and hosting evidence.
+
+### Published source and builds
+- GitHub preview branch `preview/mobile-header-refine` now contains hardening commit `23cc473c2a81badeec2cec7ab6ff2b537ee4e868` (`Fix customer auth proxy and harden checkout controls`).
+- The new source passed a local Next.js production build: compilation, TypeScript checks and all 16 static pages completed.
+- The Git-connected Vercel project `ebnimaam-zk22` built commit `23cc473c2a81badeec2cec7ab6ff2b537ee4e868` successfully as deployment `dpl_2GUFN72PoqUubLbQEx1AwbESkFDe`. This is a separate protected project with no environment variables configured; its `/api/products` endpoint returns 503. It is not the production store and must not be promoted as-is.
+- The intended production project `ebnimaam` remains on READY deployment `dpl_83B1QE21aNnSXkaJr7SsJyYDaLZ2`, commit `9ad166dace11f20a43fa45912982d3958d466721`, with `https://ebnimaam.vercel.app` assigned. The production alias is serving the prior source, not commit `23cc473`.
+- The primary project's Vercel deployment check for commit `23cc473` failed with the Free-plan daily deployment quota error `api-deployments-free-per-day` (HTTP 402; retry after 24 hours). No paid plan change was made. The updated source is published to GitHub but is not yet deployed to the official production domain.
+
+### Code changes in commit 23cc473
+- Removed the invalid `x-forwarded-host` value from the Neon Auth proxy. Direct comparison confirmed that the forwarded storefront hostname causes Neon Auth to return `INVALID_HOSTNAME`; without that header the upstream session endpoint returns HTTP 200 with a null unauthenticated session. The new protected Vercel preview confirmed `/api/auth/get-session` returns 200/null.
+- Signup challenge nonce consumption is now atomic and one-time, using a hashed nonce stored in the existing rate-limit table. A live production replay test is still pending because production serves the previous deployment and the successful secondary preview has no database connection.
+- Removed the unverified hard-coded `EBN10` 10% discount from the checkout UI and server. No coupon is applied until the owner-defined promotion rules are configured and validated.
+- Admin fulfilment updates now reject picked/packed/shipped/delivered transitions unless payment status is `paid`.
+- Removed clickable account deactivation/deletion actions because no verified backend workflow exists; the account page now clearly says these requests are not yet available.
+
+### Production and database evidence
+- At the audit time, production HTML and static routes (store, account, admin, order tracking, payment return, manifest, service worker and icon assets) returned HTTP 200.
+- Production `/api/auth/get-session` returned HTTP 400 `INVALID_HOSTNAME` before the new code is deployed. This is the current reason customer login/registration must not be marked production-verified.
+- Unauthenticated production checkout correctly returned HTTP 401 requiring sign-in; unauthenticated customer profile returned 401 and admin API returned 401.
+- Neon currently has one Ebnimaam catalogue row and zero active in-stock saleable products. The only Ebnimaam catalogue item is inactive; legacy/test catalogue records remain hidden and must not be published as real stock.
+- Neon currently has four Ebnimaam orders, all payment status `pending`, with fulfilment labels including packed, shipped, delivered and cancelled. The payment-event and order-status-history tables contain zero rows. No rows were modified during this audit.
+- Neon Auth currently has zero users. No real account registration or email OTP delivery has been verified.
+- No real Paystack charge was initiated. Paystack credentials and configuration were not changed. The Paystack webhook and reconciliation paths have not been exercised against a test transaction.
+
+### Remaining release gates
+- Deploy commit `23cc473` (or a later verified commit) to the existing `ebnimaam` Vercel project when the deployment quota permits or the owner resolves the plan limit.
+- Recheck `/api/auth/get-session`, signup challenge nonce use, email OTP delivery, sign-in, embedded account, cart restoration and profile/order history on the intended production domain.
+- Owner must supply real product names, prices, variants, images and confirmed physical stock; do not publish test/legacy rows.
+- Reconcile the four pending-order fulfilment inconsistencies with the owner before editing any order or payment records.
+- Exercise Paystack in its test mode and verify webhook delivery without a real charge; confirm webhook endpoint settings in the Paystack dashboard.
+- Build and verify a new Android APK from the deployed production version; the existing `android-apk-44` debug APK is older and not Play Store-signed.
