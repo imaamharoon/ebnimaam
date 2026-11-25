@@ -22,6 +22,10 @@ export async function GET(req: Request) {
     await init();
     const result = await pool.query('SELECT settings,updated_at FROM public.ebnimaam_store_settings WHERE id=1');
     const settings = { ...defaultSettings, ...(result.rows[0]?.settings || {}) };
+    if (!String(settings.supportEmail || '').trim()) settings.supportEmail = defaultSettings.supportEmail;
+    if (!String(settings.supportPhone || '').trim()) settings.supportPhone = defaultSettings.supportPhone;
+    if (!settings.deliveryFeesByState || typeof settings.deliveryFeesByState !== 'object') settings.deliveryFeesByState = defaultFees;
+    else settings.deliveryFeesByState = { ...defaultFees, ...settings.deliveryFeesByState };
     if (!isAdminRequest(req)) {
       const { returnsPolicy, privacyPolicy, terms, shippingPolicy, ...publicSettings } = settings;
       return NextResponse.json({ settings: publicSettings, updated_at: result.rows[0]?.updated_at }, { headers: { 'cache-control': 'no-store' } });
