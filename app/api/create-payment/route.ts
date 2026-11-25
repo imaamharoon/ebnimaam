@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     if (!session.ok) return NextResponse.json({ error: 'Please sign in before checkout.' }, { status: 401 });
     const sessionData = await session.json();
     const user = sessionData?.user;
-    if (!user?.id || !user?.email) return NextResponse.json({ error: 'Please sign in before checkout.' }, { status: 401 });
+    if (!user?.id || !user?.email || user.emailVerified !== true) return NextResponse.json({ error: 'Please verify your email address before checkout.' }, { status: 403 });
 
     const body = await req.json();
     const address = body?.address || {};
