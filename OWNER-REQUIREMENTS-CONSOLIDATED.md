@@ -208,3 +208,12 @@ This addendum supersedes the older deployment statement in section 13 and record
 - The Android workflow now runs `npm run build` as a Next.js production-build verification step before generating the APK. Run 49 (workflow commit `bbbce2c8b36bc5978b351b1d4b021389bfc73105`) completed the Next.js build step successfully; run 50 (latest storefront account-label commit `1587731e78107b91f18306dd7b388c54da60b788`) has also completed its Next.js production-build step successfully. Android APK packaging/publishing was still running at the time of this note.
 - The current official production `/api/products` endpoint responds HTTP 200 with an empty `products` array. There are no approved active, in-stock products to show to customers.
 - Current candidate branch head is `1587731e78107b91f18306dd7b388c54da60b788`. Neither this code nor the later documentation-only commits have been deployed to the official Vercel project; the existing production domain remains on commit `9ad166d` pending the Free-plan deployment quota reset or a separately authorized hosting-plan change.
+
+
+## 19. Latest verified Android release — 25 November 2026, 19:47 UTC
+
+- GitHub Actions run 50 (`45688195704`) completed successfully for application source commit `1587731e78107b91f18306dd7b388c54da60b788`. The Next.js production build, Capacitor setup, branded icon generation, Android wrapper, launcher icon generation, APK assembly and GitHub release publishing all succeeded.
+- The resulting release is `android-apk-50`: https://github.com/imaamharoon/ebnimaam/releases/tag/android-apk-50.
+- APK asset `app-debug.apk`: 5,481,736 bytes; SHA-256 `d9fe84e079cb8a9cdb325c5f6a1a1ac07cc77416fb700c8160105a7c7015a74c`; direct download https://github.com/imaamharoon/ebnimaam/releases/download/android-apk-50/app-debug.apk. GitHub reports the asset state as uploaded.
+- This remains a debug/sideload APK, not Play Store-signed, and it has not been installed on a physical device. The Capacitor remote server setting points to `https://ebnimaam.vercel.app/store.html`; that domain is still serving the older production deployment until the primary Vercel quota issue is resolved. Rebuild the APK after the official production deployment is updated and verify an installed-device sign-in/checkout journey.
+- The latest application source commit is `1587731e78107b91f18306dd7b388c54da60b788`; this checklist update is documentation-only commit `65e505b9df89306222c31c72c335fd008d7ba67c`.
