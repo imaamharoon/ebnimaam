@@ -10,7 +10,7 @@ export function createAdminSession(secret: string) {
 }
 export function isAdminRequest(req: Request, secret = process.env.ADMIN_PASSWORD || '') {
   if (!secret) return false;
-  const match = (req.headers.get('cookie') || '').match(/(?:^|;\\s*)ebn_admin=([^;]+)/);
+  const match = (req.headers.get('cookie') || '').match(/(?:^|;\s*)ebn_admin=([^;]+)/);
   if (!match) return false;
   const [expiresPart, suppliedPart] = decodeURIComponent(match[1]).split('.');
   const expiresAt = Number(expiresPart);
