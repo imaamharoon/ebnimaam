@@ -27,10 +27,12 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
   const signin = req.method === 'POST' && endpoint === 'sign-in/email';
   const otpSend = req.method === 'POST' && endpoint === 'email-otp/send-verification-otp';
   const otpVerify = req.method === 'POST' && endpoint === 'email-otp/verify-email';
-  if (signup || signin || otpSend || otpVerify) {
+  const passwordResetRequest = req.method === 'POST' && endpoint === 'request-password-reset';
+  const passwordReset = req.method === 'POST' && endpoint === 'reset-password';
+  if (signup || signin || otpSend || otpVerify || passwordResetRequest || passwordReset) {
     try {
-      const scope = signup ? 'auth-signup' : signin ? 'auth-signin' : otpSend ? 'email-otp-send' : 'email-otp-verify';
-      const limit = signup ? 5 : signin ? 20 : otpSend ? 5 : 10;
+      const scope = signup ? 'auth-signup' : signin ? 'auth-signin' : otpSend ? 'email-otp-send' : otpVerify ? 'email-otp-verify' : passwordResetRequest ? 'auth-password-reset-request' : 'auth-password-reset';
+      const limit = signup ? 5 : signin ? 20 : otpSend ? 5 : otpVerify ? 10 : passwordResetRequest ? 5 : 10;
       const allowed = await checkRateLimit(req, scope, limit, 15 * 60);
       if (!allowed) return NextResponse.json({ error: 'Too many attempts. Please wait 15 minutes before trying again.' }, { status: 429, headers: { 'retry-after': '900' } });
     } catch {
