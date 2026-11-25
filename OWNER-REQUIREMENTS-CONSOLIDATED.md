@@ -182,3 +182,12 @@ This addendum supersedes the older deployment statement in section 13 and record
 - Release `android-apk-46` is published at https://github.com/imaamharoon/ebnimaam/releases/tag/android-apk-46. Its `app-debug.apk` asset is 5,481,713 bytes (about 5.5 MB), uploaded with SHA-256 `5be840faf5e00d3a1b56688a4592de64485ddbf5da69eb59e39e8eb1bd65f34c`. Direct download: https://github.com/imaamharoon/ebnimaam/releases/download/android-apk-46/app-debug.apk.
 - This APK was built from the hardened code commit but is a debug/sideload APK, not a Play Store-signed release. Its Capacitor server URL remains `https://ebnimaam.vercel.app/store.html`, which currently serves the older production deployment. The APK has not been installed and verified on a physical Android device; rebuild after the updated application is deployed to the official production project.
 - The single-use signup challenge database primitive was tested against the Neon rate-limit table using a temporary QA key: first insertion returned one row, a duplicate replay returned zero rows, and the temporary row was deleted. This verifies the atomic database consume operation only; it is not an end-to-end registration or OTP-delivery test.
+
+
+## 16. Paystack inbox reconciliation note — 25 November 2026, 19:38 UTC
+
+- The connected Gmail search returned two Paystack messages for the same reference, dated 24 November 2026 at 12:46 UTC: a merchant receipt notification and a Paystack receipt. The email reference is `EBN-1795524307294-71D619A9`.
+- That reference does not match any of the four rows currently in `public.ebnimaam_orders`; the payment-events table also has zero rows. The four current orders remain `pending`, with null `paid_at` and null `provider_transaction_id`.
+- Do not infer that any of those four pending orders was paid from the separate inbox receipt. Reconcile the email reference against the Paystack merchant transaction dashboard/API and the associated original checkout before making any order/payment database correction.
+- No payment, order, status, stock, refund or customer row was changed during this investigation. No Paystack configuration was changed and no charge was initiated.
+- Slack search for the Ebnimaam project returned no matching messages in the connected workspace search scope. No relevant project decision or product-inventory approval was found in the Gmail results reviewed.
