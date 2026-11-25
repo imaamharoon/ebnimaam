@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { verifyAndReconcilePaystack } from '@/lib/paystack-reconciliation';
+import { verifyAndReconcilePaystack } from '../../../lib/paystack-reconciliation';
 
 export const runtime = 'nodejs';
 
