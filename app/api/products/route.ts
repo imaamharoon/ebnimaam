@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
-import { isAdminRequest } from '@/lib/admin-auth';
+import { isAdminRequest } from '../../../lib/admin-auth';
 
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
