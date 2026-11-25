@@ -174,3 +174,11 @@ This addendum supersedes the older deployment statement in section 13 and record
 - Reconcile the four pending-order fulfilment inconsistencies with the owner before editing any order or payment records.
 - Exercise Paystack in its test mode and verify webhook delivery without a real charge; confirm webhook endpoint settings in the Paystack dashboard.
 - Build and verify a new Android APK from the deployed production version; the existing `android-apk-44` debug APK is older and not Play Store-signed.
+
+ 
+## 15. Android build and challenge replay QA update — 25 November 2026, 19:35 UTC
+
+- GitHub Actions run `45686141185` (run 46, branch `preview/mobile-header-refine`, source commit `23cc473c2a81badeec2cec7ab6ff2b537ee4e868`) completed successfully. The job's checkout, toolchain setup, Android SDK installation, dependency installation, branded icon generation, Capacitor wrapper generation, launcher icon generation, APK build and release-publish steps all report success.
+- Release `android-apk-46` is published at https://github.com/imaamharoon/ebnimaam/releases/tag/android-apk-46. Its `app-debug.apk` asset is 5,481,713 bytes (about 5.5 MB), uploaded with SHA-256 `5be840faf5e00d3a1b56688a4592de64485ddbf5da69eb59e39e8eb1bd65f34c`. Direct download: https://github.com/imaamharoon/ebnimaam/releases/download/android-apk-46/app-debug.apk.
+- This APK was built from the hardened code commit but is a debug/sideload APK, not a Play Store-signed release. Its Capacitor server URL remains `https://ebnimaam.vercel.app/store.html`, which currently serves the older production deployment. The APK has not been installed and verified on a physical Android device; rebuild after the updated application is deployed to the official production project.
+- The single-use signup challenge database primitive was tested against the Neon rate-limit table using a temporary QA key: first insertion returned one row, a duplicate replay returned zero rows, and the temporary row was deleted. This verifies the atomic database consume operation only; it is not an end-to-end registration or OTP-delivery test.
