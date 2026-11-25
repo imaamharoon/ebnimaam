@@ -16,7 +16,7 @@ const states = new Set([
   'Edo','Ekiti','Enugu','FCT - Abuja','Gombe','Imo','Jigawa','Kaduna','Kano','Katsina','Kebbi','Kogi',
   'Kwara','Lagos','Nasarawa','Niger','Ogun','Ondo','Osun','Oyo','Plateau','Rivers','Sokoto','Taraba','Yobe','Zamfara'
 ]);
-function delivery(state: string) { return deliveryFees[state] ?? 5000; }
+function fallbackDelivery(state: string) { return deliveryFees[state] ?? 5000; }
 
 export async function POST(req: Request) {
   let reference = '';
@@ -83,7 +83,11 @@ export async function POST(req: Request) {
 
     const promoCode = String(body?.promoCode || '').trim().toUpperCase();
     const discount = promoCode === 'EBN10' ? Math.round(subtotal * 0.10) : 0;
-    const deliveryFee = delivery(state);
+    const settingsResult = await pool.query('SELECT settings FROM public.ebnimaam_store_settings WHERE id=1');
+    const storeSettings = settingsResult.rows[0]?.settings || {};
+    const configuredFees = storeSettings.deliveryFeesByState || {};
+    const deliveryFee = Number(configuredFees[state] ?? configuredFees.default ?? fallbackDelivery(state));
+    if (!Number.isSafeInteger(deliveryFee) || deliveryFee < 0 || deliveryFee > 50000) throw new Error('Delivery fee configuration is invalid. Please contact the store.');
     const amountNaira = subtotal - discount + deliveryFee;
     if (!Number.isSafeInteger(amountNaira) || amountNaira <= 0) throw new Error('The checkout total is invalid.');
     const amountKobo = amountNaira * 100;
