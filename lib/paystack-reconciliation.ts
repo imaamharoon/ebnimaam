@@ -1,9 +1,16 @@
 import { Pool } from 'pg';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
-type ReconcileResult = { paid: true; reference: string; alreadyProcessed: boolean; fulfilmentStatus: string };
+type ReconcileResult =
+  | { paid: true; reference: string; alreadyProcessed: boolean; fulfilmentStatus: string }
+  | { paid: false; reference: string; status: string; alreadyProcessed: boolean };
 
-export async function verifyAndReconcilePaystack(referenceInput: string, sourceEvent?: Record<string, unknown>): Promise<ReconcileResult> {
+const terminalFailureStatuses = new Set(['failed', 'abandoned', 'reversed']);
+
+export async function verifyAndReconcilePaystack(
+  referenceInput: string,
+  sourceEvent?: Record<string, unknown>,
+): Promise<ReconcileResult> {
   const reference = String(referenceInput || '').trim();
   const secret = process.env.PAYSTACK_SECRET_KEY;
   if (!reference || !secret || !process.env.DATABASE_URL) throw new Error('Payment verification is not configured.');
@@ -14,22 +21,26 @@ export async function verifyAndReconcilePaystack(referenceInput: string, sourceE
   });
   const payload = await response.json().catch(() => null);
   const tx = payload?.data;
-  if (!response.ok || !payload?.status || tx?.status !== 'success' || tx?.reference !== reference) {
-    throw new Error('Paystack has not confirmed this payment.');
+  if (!response.ok || !payload?.status || tx?.reference !== reference) {
+    throw new Error('Paystack could not verify this payment reference.');
   }
-  if (tx.currency !== 'NGN') throw new Error('The transaction currency does not match NGN.');
+  const transactionStatus = String(tx.status || '').toLowerCase();
   const amountKobo = Number(tx.amount);
   const transactionId = Number(tx.id);
+  if (tx.currency !== 'NGN') throw new Error('The transaction currency does not match NGN.');
   if (!Number.isSafeInteger(amountKobo) || amountKobo <= 0 || !Number.isSafeInteger(transactionId) || transactionId <= 0) {
     throw new Error('Paystack returned an invalid transaction amount or ID.');
   }
 
+  const eventName = typeof sourceEvent?.event === 'string'
+    ? sourceEvent.event
+    : transactionStatus === 'success' ? 'transaction.verified' : 'transaction.status_checked';
   const safeEvent = {
     source: sourceEvent ? 'webhook' : 'customer_return',
-    event: typeof sourceEvent?.event === 'string' ? sourceEvent.event : 'transaction.verified',
+    event: eventName,
     transaction_id: transactionId,
     reference,
-    status: String(tx.status),
+    status: transactionStatus,
     currency: String(tx.currency),
     amount: amountKobo,
     channel: typeof tx.channel === 'string' ? tx.channel : null,
@@ -40,7 +51,8 @@ export async function verifyAndReconcilePaystack(referenceInput: string, sourceE
   try {
     await client.query('BEGIN');
     const locked = await client.query(
-      'SELECT reference, amount_kobo, status, fulfilment_status, items, provider_transaction_id, currency FROM public.ebnimaam_orders WHERE reference = $1 FOR UPDATE',
+      `SELECT reference,amount_kobo,status,fulfilment_status,items,provider_transaction_id,currency
+       FROM public.ebnimaam_orders WHERE reference=$1 FOR UPDATE`,
       [reference],
     );
     if (!locked.rowCount) throw new Error('The order reference was not found.');
@@ -50,6 +62,29 @@ export async function verifyAndReconcilePaystack(referenceInput: string, sourceE
     }
     if (order.provider_transaction_id && Number(order.provider_transaction_id) !== transactionId) {
       throw new Error('This order is already linked to a different Paystack transaction.');
+    }
+
+    const eventId = 'paystack-transaction-' + transactionId + '-' + transactionStatus;
+    if (transactionStatus !== 'success') {
+      if (terminalFailureStatuses.has(transactionStatus)) {
+        if (order.status !== 'paid' && order.status !== transactionStatus) {
+          await client.query(
+            'UPDATE public.ebnimaam_orders SET status=$1,payment_provider=$2,provider_transaction_id=$3,updated_at=NOW() WHERE reference=$4',
+            [transactionStatus, 'paystack', transactionId, reference],
+          );
+          await client.query(
+            'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
+            [reference, transactionStatus, 'Paystack reported transaction status: ' + transactionStatus + '.', 'paystack'],
+          );
+        }
+      }
+      await client.query(
+        `INSERT INTO public.ebnimaam_payment_events(reference,provider_event_id,provider_transaction_id,event_type,payload,processed_at)
+         VALUES($1,$2,$3,$4,$5::jsonb,NOW()) ON CONFLICT(provider_event_id) DO NOTHING`,
+        [reference,eventId,transactionId,eventName,JSON.stringify(safeEvent)],
+      );
+      await client.query('COMMIT');
+      return { paid: false, reference, status: transactionStatus || 'unconfirmed', alreadyProcessed: false };
     }
 
     const alreadyProcessed = order.status === 'paid' && Number(order.provider_transaction_id) === transactionId;
@@ -70,7 +105,7 @@ export async function verifyAndReconcilePaystack(referenceInput: string, sourceE
       if (!stockIssue) {
         for (const item of normalised) {
           const stockRow = await client.query(
-            'SELECT stock FROM public.ebnimaam_products WHERE id = $1 FOR UPDATE',
+            'SELECT stock FROM public.ebnimaam_products WHERE id=$1 FOR UPDATE',
             [item.productId],
           );
           if (!stockRow.rowCount || Number(stockRow.rows[0].stock || 0) < item.qty) {
@@ -83,8 +118,8 @@ export async function verifyAndReconcilePaystack(referenceInput: string, sourceE
       if (!stockIssue) {
         for (const item of normalised) {
           await client.query(
-            'UPDATE public.ebnimaam_products SET stock = stock - $1, updated_at = NOW() WHERE id = $2',
-            [item.qty, item.productId],
+            'UPDATE public.ebnimaam_products SET stock=stock-$1,updated_at=NOW() WHERE id=$2',
+            [item.qty,item.productId],
           );
         }
       } else {
@@ -93,31 +128,30 @@ export async function verifyAndReconcilePaystack(referenceInput: string, sourceE
 
       await client.query(
         `UPDATE public.ebnimaam_orders
-         SET status = 'paid', paid_at = COALESCE(paid_at, NOW()), payment_provider = 'paystack',
-             provider_transaction_id = $2, currency = 'NGN', fulfilment_status = $3, updated_at = NOW()
-         WHERE reference = $1`,
-        [reference, transactionId, fulfilmentStatus],
+         SET status='paid',paid_at=COALESCE(paid_at,NOW()),payment_provider='paystack',
+             provider_transaction_id=$2,currency='NGN',fulfilment_status=$3,updated_at=NOW()
+         WHERE reference=$1`,
+        [reference,transactionId,fulfilmentStatus],
       );
       await client.query(
         'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
-        [reference, 'paid', stockIssue ? 'Payment verified. Stock needs owner review before fulfilment.' : 'Payment verified with Paystack; inventory updated.', 'paystack'],
+        [reference,'paid',stockIssue?'Payment verified. Stock needs owner review before fulfilment.':'Payment verified with Paystack; inventory updated.','paystack'],
       );
       if (stockIssue) {
         await client.query(
           'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
-          [reference, 'stock_issue', 'Payment received but stock could not be fully confirmed. Owner action required.', 'system'],
+          [reference,'stock_issue','Payment received but stock could not be fully confirmed. Owner action required.','system'],
         );
       }
     }
 
-    const eventId = 'paystack-transaction-' + transactionId;
     await client.query(
       `INSERT INTO public.ebnimaam_payment_events(reference,provider_event_id,provider_transaction_id,event_type,payload,processed_at)
-       VALUES($1,$2,$3,$4,$5::jsonb,NOW()) ON CONFLICT (provider_event_id) DO NOTHING`,
-      [reference, eventId, transactionId, safeEvent.event, JSON.stringify(safeEvent)],
+       VALUES($1,$2,$3,$4,$5::jsonb,NOW()) ON CONFLICT(provider_event_id) DO NOTHING`,
+      [reference,eventId,transactionId,eventName,JSON.stringify(safeEvent)],
     );
     await client.query('COMMIT');
-    return { paid: true, reference, alreadyProcessed, fulfilmentStatus };
+    return { paid:true,reference,alreadyProcessed,fulfilmentStatus };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;
