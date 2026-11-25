@@ -1,14 +1,29 @@
-# Ebnimaam starter
+# Ebnimaam
 
-Next.js 14 storefront starter with cart, Paystack initialization and verification endpoints, and an admin password gate.
+Ebnimaam is a mobile-friendly storefront built with Next.js and static storefront assets.
 
-## Environment
-- `PAYSTACK_SECRET_KEY`: Paystack secret key, server-only
-- `ADMIN_PASSWORD`: strong admin password (legacy typo `ADMIN_PASWORD` also recognized)
-- `DATABASE_URL`: Neon connection string (database schema included, order persistence not yet wired)
+## Current features
+- Responsive storefront, product browsing, filtering and cart
+- Checkout flow that initializes Paystack transactions
+- Server-side payment verification and persisted order records (PostgreSQL)
+- Customer order tracking by reference and email
+- Customer sign-in/account page, profile/address editing and order history
+- Admin dashboard for order visibility, fulfilment status, product and news management
+- Installable web app manifest and service worker
 
-## Run
-`npm install && npm run dev`
+## Environment variables
+- `DATABASE_URL`: PostgreSQL/Neon connection string
+- `PAYSTACK_SECRET_KEY`: Paystack secret key; keep server-only
+- `ADMIN_PASSWORD`: administrator password
 
-## Notes
-This starter is not production-ready: checkout currently uses a placeholder customer email, it does not persist or reconcile orders, webhook processing and inventory management are not implemented, and the admin gate does not establish a persistent authenticated session. Do not use it to accept live payments until these issues are resolved and tested.
+## Development
+`npm install` then `npm run dev`
+
+## Important launch checks
+- Run checkout and payment verification end-to-end in Paystack test mode before accepting live payments.
+- Review deployment environment variables and database connectivity.
+- Verify account authentication, customer profile routes, admin access, product/news editing, tracking privacy, and installability on real mobile devices.
+- Verify inventory, refund, webhook, shipping and account deletion workflows before treating them as complete.
+- Do not use production payment credentials or make real charges as part of preview testing.
+
+This repository is actively being improved. Some workflows may not yet be complete or fully tested; confirm the live behavior before relying on them.
