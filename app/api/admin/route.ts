@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { timingSafeEqual } from 'crypto';
 import { Pool } from 'pg';
 import { createAdminSession, isAdminRequest, ADMIN_SESSION_MAX_AGE } from '../../../lib/admin-auth';
+import { checkRateLimit } from '../../../lib/rate-limit';
 
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
@@ -14,6 +15,7 @@ function sameSecret(value: string, expected: string) {
 }
 export async function POST(req: Request) {
   try {
+    if (!(await checkRateLimit(req, 'admin-signin', 8, 15 * 60))) return NextResponse.json({ error: 'Too many administrator sign-in attempts. Please wait 15 minutes.' }, { status: 429, headers: { 'retry-after': '900' } });
     const { password } = await req.json();
     if (!secret) return NextResponse.json({ error: 'Admin password is not configured.' }, { status: 503 });
     if (typeof password !== 'string' || !sameSecret(password, secret)) {
