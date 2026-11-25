@@ -1,7 +1,7 @@
 name: Build Android APK
 on:
   push:
-    branches: [main]
+    branches: [main, preview/mobile-header-refine]
     paths:
       - 'capacitor.config.json'
       - '.github/workflows/android-apk.yml'
