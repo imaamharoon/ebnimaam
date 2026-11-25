@@ -17,7 +17,7 @@ function verifyChallenge(token: string, answer: string, key: string) {
     return Number(data.exp) > Date.now() && String(data.code).toUpperCase() === answer.trim().toUpperCase();
   } catch { return false; }
 }
-async function proxy(req: Request, ctx: { params: { path: string[] } | Promise<{ path: string[] }> }) {
+async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> }) {
   const url = new URL(req.url);
   const { path = [] } = await ctx.params;
   const endpoint = path.join('/');
