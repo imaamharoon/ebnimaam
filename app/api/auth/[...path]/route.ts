@@ -1,21 +1,23 @@
 import { NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { checkRateLimit } from '../../../../lib/rate-limit';
+import { checkRateLimit, consumeOneTimeChallenge } from '../../../../lib/rate-limit';
 export const runtime = 'nodejs';
 const base = (process.env.NEON_AUTH_BASE_URL || 'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neon.tech/ebnimaam/auth').replace(/\/$/, '');
 const secret = () => process.env.AUTH_SECRET || process.env.BETTER_AUTH_SECRET || process.env.NEON_AUTH_SECRET;
 const sign = (value: string, key: string) => createHmac('sha256', key).update(value).digest('base64url');
-function verifyChallenge(token: string, answer: string, key: string) {
+function verifyChallenge(token: string, answer: string, key: string): string | null {
   try {
     const [payload, signature] = token.split('.');
-    if (!payload || !signature) return false;
+    if (!payload || !signature) return null;
     const expected = sign(payload, key);
     const actualBytes = Buffer.from(signature);
     const expectedBytes = Buffer.from(expected);
-    if (actualBytes.length !== expectedBytes.length || !timingSafeEqual(actualBytes, expectedBytes)) return false;
+    if (actualBytes.length !== expectedBytes.length || !timingSafeEqual(actualBytes, expectedBytes)) return null;
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
-    return Number(data.exp) > Date.now() && String(data.code).toUpperCase() === answer.trim().toUpperCase();
-  } catch { return false; }
+    const nonce = String(data.nonce || '');
+    if (Number(data.exp) <= Date.now() || String(data.code).toUpperCase() !== answer.trim().toUpperCase()) return null;
+    return /^[a-f0-9]{32}$/i.test(nonce) ? nonce : null;
+  } catch { return null; }
 }
 async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> }) {
   const url = new URL(req.url);
@@ -49,8 +51,20 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
       delete parsed.challengeAnswer;
       body = Buffer.from(JSON.stringify(parsed));
     } catch { return NextResponse.json({ error: 'Please complete the human verification challenge.' }, { status: 400 }); }
-    if (!key || !token || !verifyChallenge(decodeURIComponent(token), answer, key)) {
+    const nonce = key && token ? verifyChallenge(decodeURIComponent(token), answer, key) : null;
+    if (!nonce) {
       const failed = NextResponse.json({ error: 'Human verification failed or expired. Refresh the challenge and try again.' }, { status: 400 });
+      failed.cookies.set('ebnimaam_signup_challenge', '', { httpOnly: true, secure: url.protocol === 'https:', sameSite: 'strict', path: '/api/auth/sign-up/email', maxAge: 0 });
+      return failed;
+    }
+    try {
+      if (!(await consumeOneTimeChallenge(nonce))) {
+        const failed = NextResponse.json({ error: 'This verification challenge has already been used. Refresh the code and try again.' }, { status: 400 });
+        failed.cookies.set('ebnimaam_signup_challenge', '', { httpOnly: true, secure: url.protocol === 'https:', sameSite: 'strict', path: '/api/auth/sign-up/email', maxAge: 0 });
+        return failed;
+      }
+    } catch {
+      const failed = NextResponse.json({ error: 'Signup verification is temporarily unavailable. Please refresh the code and try again.' }, { status: 503 });
       failed.cookies.set('ebnimaam_signup_challenge', '', { httpOnly: true, secure: url.protocol === 'https:', sameSite: 'strict', path: '/api/auth/sign-up/email', maxAge: 0 });
       return failed;
     }
@@ -63,7 +77,6 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
     if (value) headers.set(header, value);
   }
   headers.set('origin', url.origin);
-  headers.set('x-forwarded-host', url.host);
   headers.set('x-forwarded-proto', url.protocol.replace(':', ''));
   const init: RequestInit = { method: req.method, headers, redirect: 'manual', cache: 'no-store' };
   if (body !== undefined) init.body = body;

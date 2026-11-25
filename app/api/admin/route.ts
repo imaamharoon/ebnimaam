@@ -70,12 +70,17 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'Invalid order reference or fulfilment status.' }, { status: 400 });
     }
     await client.query('BEGIN');
-    const found = await client.query('SELECT fulfilment_status FROM public.ebnimaam_orders WHERE reference=$1 FOR UPDATE', [String(reference)]);
+    const found = await client.query('SELECT fulfilment_status,status FROM public.ebnimaam_orders WHERE reference=$1 FOR UPDATE', [String(reference)]);
     if (!found.rowCount) {
       await client.query('ROLLBACK');
       return NextResponse.json({ error: 'Order not found.' }, { status: 404 });
     }
     const previous = String(found.rows[0].fulfilment_status || 'processing');
+    const paymentStatus = String(found.rows[0].status || 'pending').toLowerCase();
+    if (paymentStatus !== 'paid' && ['picked', 'packed', 'shipped', 'delivered'].includes(fulfilment_status)) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'Payment must be verified before an order can be picked, packed, shipped or delivered.' }, { status: 409 });
+    }
     if (previous !== fulfilment_status) {
       await client.query(
         'UPDATE public.ebnimaam_orders SET fulfilment_status=$1,updated_at=NOW() WHERE reference=$2',

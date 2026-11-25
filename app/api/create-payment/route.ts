@@ -82,7 +82,10 @@ export async function POST(req: Request) {
     });
 
     const promoCode = String(body?.promoCode || '').trim().toUpperCase();
-    const discount = promoCode === 'EBN10' ? Math.round(subtotal * 0.10) : 0;
+    if (promoCode) {
+      return NextResponse.json({ error: 'Promotional codes are not currently available. Please remove the code and continue.' }, { status: 400 });
+    }
+    const discount = 0;
     const settingsResult = await pool.query('SELECT settings FROM public.ebnimaam_store_settings WHERE id=1');
     const storeSettings = settingsResult.rows[0]?.settings || {};
     const configuredFees = storeSettings.deliveryFeesByState || {};
