@@ -30,7 +30,7 @@ function boot(){
  form.addEventListener("submit",function(event){event.preventDefault();ask(input.value)});
  box.querySelectorAll("[data-q]").forEach(function(chip){chip.addEventListener("click",function(){ask(chip.getAttribute("data-q"))})});
  fetch("/api/store-settings",{cache:"no-store"}).then(function(r){return r.json()}).then(function(data){
-  var phone=String(data.settings&&data.settings.supportPhone||"").replace(/\D/g,"");if(!phone)return;
+  var phone=String(data.settings&&data.settings.supportPhone||"2348145672755").replace(/\D/g,"");if(!phone)return;
   if(phone.charAt(0)==="0")phone="234"+phone.slice(1);else if(phone.slice(0,3)!=="234")phone="234"+phone;
   var link=box.querySelector("#ebChatWhatsApp");link.href="https://wa.me/"+phone+"?text="+encodeURIComponent("Hello ebnimaam, I need help with a product or order.");link.hidden=false;
  }).catch(function(){});

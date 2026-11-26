@@ -389,7 +389,7 @@
       const catalogue=await catalogResponse.json();if(!catalogResponse.ok)throw new Error("The collection is temporarily unavailable.");
       catalog=Array.isArray(catalogue.products)?catalogue.products:[];
       const settings=await settingsResponse.json().catch(()=>({}));deliveryFees=settings.settings&&settings.settings.deliveryFeesByState?settings.settings.deliveryFeesByState:deliveryFees;
-      const phone=String(settings.settings&&settings.settings.supportPhone||"").replace(/\D/g,"");
+      const phone=String(settings.settings&&settings.settings.supportPhone||"2348145672755").replace(/\D/g,"");
       if(phone){let digits=phone;if(digits.startsWith("0"))digits="234"+digits.slice(1);else if(!digits.startsWith("234"))digits="234"+digits;$("whatsappSupport").href="https://wa.me/"+digits+"?text="+encodeURIComponent("Hello ebnimaam, I have a question about a product.");$("whatsappSupport").hidden=false}
       const id=new URLSearchParams(location.search).get("id");
       product=catalog.find(item=>String(item.id)===String(id)&&Number(item.stock)>0);
