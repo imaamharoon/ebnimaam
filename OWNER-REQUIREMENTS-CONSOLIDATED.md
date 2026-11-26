@@ -365,3 +365,35 @@ Nigeria-only operations; Paystack-only; authenticated checkout; no Facebook/soci
 ### Verification status
 - The source change must pass the new preview build, PDF route behavior and account-gate checks before production promotion.
 - The existing Paystack integration, customer signup verification backend, two-minute signup cooldown and customer profile persistence were intentionally left unchanged.
+
+
+## 26. Mobile product experience, guest checkout and support chat — 26 November 2026
+
+### Product page and catalogue
+- A mobile-first dynamic product details route is available at /product.html?id={productId}. Store product cards link to the page; the page loads only published, in-stock catalogue records and does not invent or publish placeholder inventory.
+- The product page includes a sticky brand header, responsive swipeable gallery, gallery pagination, NGN pricing, variant colour swatches, per-size stock states, size selection, Size Guide & Fit Finder, delivery/payment trust information, collapsible product details, verified fit reviews, floating WhatsApp support and a sticky mobile add-to-cart bar.
+- The Fit Finder uses height, weight and fit preference to suggest an available starting size. Where no real size-chart measurements have been saved, a clearly labelled illustrative chart is shown; administrators should replace it with measured product data before publishing.
+- Product records now support additional gallery images, stock by size, colours, model height/size, fit, fabric/care details and a centimetre size chart. Admin product editing includes fields for this metadata.
+- Customer reviews are purchase-verified: only a signed-in, email-verified customer with a paid order for that product can submit one. Public ratings and customer photos are drawn only from submitted reviews; no fake ratings or sample customer images are shown.
+
+### Guest checkout
+- Account sign-in is optional for browsing and checkout; the automatic account gate has been removed. The account page remains available from the header for customers who want a profile and order history.
+- The checkout API accepts a guest's name, valid email, phone and Nigerian delivery address when no verified customer session exists. Verified signed-in customers can still check out against their account.
+- Product prices, availability, per-size stock, delivery fees and payment initialization remain server-validated. Paystack remains the payment provider and its secret key and reconciliation/webhook implementation have not been changed.
+- Guest orders are stored with a null auth user ID and the customer's supplied email, so existing reference/email order tracking can still identify them.
+
+### Customer support chat
+- The support widget is available on the storefront and product page. It uses a small vanilla JavaScript/CSS implementation, short conversation history, request limits and a WhatsApp handoff link derived from the store's saved support phone number.
+- /api/chat supports Gemini 2.5 Flash when GEMINI_API_KEY is configured on Vercel. A project environment-variable check found no GEMINI_API_KEY; the endpoint therefore serves deterministic store FAQ replies until the owner adds a Gemini key. The browser never receives the key.
+- The support knowledge base follows the owner's supplied sizing, Nigeria delivery, Paystack and exchange information. Specific existing-order and bulk questions are directed to the human WhatsApp support link.
+
+### OTP email branding
+- Neon Auth's app name and shared-provider sender display name are set to ebnimaam. Existing email OTP and verified-sign-up settings remain unchanged.
+- The owner's HTML verification-code template is stored at emails/verification-code.html.
+- Managed Better Auth's current shared sender does not expose a custom HTML-template setting through the available Neon configuration API. A send.otp webhook and transactional mailer credentials are needed to replace the live email body. The webhook was intentionally left disabled so the working account verification email path is not interrupted. The source template is prepared but is not represented as already active in outgoing emails.
+
+### Release verification and remaining owner input
+- Preview/production builds and runtime checks for this section must pass before the production release is marked complete.
+- No products, prices, images, reviews, customer accounts, order records or inventory were invented or inserted by this code update.
+- The owner must supply a Gemini API key to enable Gemini-generated answers rather than the included quick FAQ fallback, and should provide real product photographs, product copy, per-size stock and garment measurements through the admin editor before publishing catalogue items.
+- A custom transactional email provider and credentials are required before the saved HTML OTP template can be used for live outgoing emails.

@@ -26,18 +26,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Checkout is temporarily unavailable.' }, { status: 503 });
     }
 
-    const cookie = req.headers.get('cookie') || '';
-    if (!cookie) return NextResponse.json({ error: 'Sign in is required before checkout.' }, { status: 401 });
-    const origin = new URL(req.url).origin;
-    const session = await fetch(authBase + '/get-session', {
-      headers: { cookie, origin },
-      cache: 'no-store',
-    });
-    if (!session.ok) return NextResponse.json({ error: 'Please sign in before checkout.' }, { status: 401 });
-    const sessionData = await session.json();
-    const user = sessionData?.user;
-    if (!user?.id || !user?.email || user.emailVerified !== true) return NextResponse.json({ error: 'Please verify your email address before checkout.' }, { status: 403 });
-
     let checkoutAllowed = false;
     try {
       checkoutAllowed = await checkRateLimit(req, 'customer-checkout', 20, 15 * 60);
@@ -47,11 +35,41 @@ export async function POST(req: Request) {
     if (!checkoutAllowed) return NextResponse.json({ error: 'Too many checkout attempts. Please wait 15 minutes before trying again.' }, { status: 429, headers: { 'retry-after': '900' } });
 
     const body = await req.json();
+    const cookie = req.headers.get('cookie') || '';
+    let verifiedUser: { id: string; email: string; name?: string } | null = null;
+    if (cookie) {
+      try {
+        const session = await fetch(authBase + '/get-session', {
+          headers: { cookie, origin: new URL(req.url).origin },
+          cache: 'no-store',
+        });
+        if (session.ok) {
+          const sessionData = await session.json();
+          const user = sessionData?.user;
+          if (user?.id && user?.email && user.emailVerified === true) {
+            verifiedUser = { id: String(user.id), email: String(user.email), name: String(user.name || '') };
+          }
+        }
+      } catch {
+        // A customer can continue as a guest if no verified session is available.
+      }
+    }
+
+    const guestName = String(body?.customer?.name || '').trim().slice(0, 120);
+    const guestEmail = String(body?.customer?.email || '').trim().toLowerCase().slice(0, 254);
+    const guestPhone = String(body?.customer?.phone || '').trim().slice(0, 40);
+    const customerName = (verifiedUser ? (guestName || verifiedUser.name || '') : guestName).trim().slice(0, 120);
+    const customerEmail = (verifiedUser ? verifiedUser.email : guestEmail).trim().toLowerCase();
+    const customerPhone = guestPhone;
+    if (customerName.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail) || customerPhone.replace(/\D/g, '').length < 7) {
+      return NextResponse.json({ error: 'Enter your full name, a valid email address and a reachable phone number to continue.' }, { status: 400 });
+    }
+
     const address = body?.address || {};
     const country = String(address.country || 'Nigeria').trim();
     const state = String(address.state || '').trim();
-    const city = String(address.city || '').trim();
-    const street = String(address.street || '').trim();
+    const city = String(address.city || '').trim().slice(0, 100);
+    const street = String(address.street || '').trim().slice(0, 240);
     if (country !== 'Nigeria' || !states.has(state) || !city || !street) {
       return NextResponse.json({ error: 'A complete Nigerian delivery address is required. International orders are not available.' }, { status: 400 });
     }
@@ -61,33 +79,57 @@ export async function POST(req: Request) {
 
     const requested = body.items.map((item: any) => ({
       productId: String(item?.productId || '').trim(),
-      size: String(item?.size || '').trim().slice(0, 40),
+      size: String(item?.size || 'One Size').trim().slice(0, 40),
+      color: String(item?.color || '').trim().slice(0, 40),
       qty: Number(item?.qty),
     }));
-    if (requested.some((item) => !item.productId || !Number.isSafeInteger(item.qty) || item.qty < 1 || item.qty > 10)) {
-      return NextResponse.json({ error: 'Please check the quantities in your cart.' }, { status: 400 });
+    if (requested.some((item: any) => !item.productId || !item.size || !Number.isSafeInteger(item.qty) || item.qty < 1 || item.qty > 10)) {
+      return NextResponse.json({ error: 'Please check the quantities and sizes in your cart.' }, { status: 400 });
     }
-    if (new Set(requested.map((item) => item.productId)).size !== requested.length) {
-      return NextResponse.json({ error: 'Remove duplicate product lines and try again.' }, { status: 400 });
+    if (new Set(requested.map((item: any) => item.productId + '|' + item.size + '|' + item.color)).size !== requested.length) {
+      return NextResponse.json({ error: 'Remove duplicate product, size and colour lines and try again.' }, { status: 400 });
     }
 
-    const productIds = requested.map((item) => item.productId);
+    const productIds = [...new Set(requested.map((item: any) => item.productId))];
     const live = await pool.query(
-      'SELECT id,name,price,stock FROM public.ebnimaam_products WHERE id = ANY($1::text[]) AND is_active = TRUE',
+      'SELECT id,name,price,stock,sizes,size_stock,product_details FROM public.ebnimaam_products WHERE id = ANY($1::text[]) AND is_active = TRUE',
       [productIds],
     );
-    if (live.rowCount !== requested.length) {
+    const catalog = new Map(live.rows.map((row: any) => [String(row.id), row]));
+    if (catalog.size !== productIds.length) {
       return NextResponse.json({ error: 'One or more products are no longer available. Refresh the shop and try again.' }, { status: 409 });
     }
 
-    const catalog = new Map(live.rows.map((row: any) => [String(row.id), row]));
-    let subtotal = 0;
-    const items = requested.map((item) => {
+    const productQuantities = new Map<string, number>();
+    const sizeQuantities = new Map<string, number>();
+    for (const item of requested) {
       const product: any = catalog.get(item.productId);
       if (!product || Number(product.price) <= 0) throw new Error('A cart product has an invalid price.');
-      if (item.qty > Number(product.stock || 0)) throw new Error('There is not enough stock for ' + String(product.name) + '.');
+      const availableSizes = Array.isArray(product.sizes) ? product.sizes.map((value: any) => String(value)) : [];
+      if (availableSizes.length && !availableSizes.includes(item.size)) throw new Error('The selected size for ' + String(product.name) + ' is no longer available.');
+      const sizeKey = JSON.stringify([item.productId, item.size]);
+      productQuantities.set(item.productId, (productQuantities.get(item.productId) || 0) + item.qty);
+      sizeQuantities.set(sizeKey, (sizeQuantities.get(sizeKey) || 0) + item.qty);
+      const colors = Array.isArray(product.product_details?.colors) ? product.product_details.colors.map((color: any) => String(color.name)) : [];
+      if (item.color && colors.length && !colors.includes(item.color)) throw new Error('The selected colour for ' + String(product.name) + ' is no longer available.');
+    }
+    for (const [productId, quantity] of productQuantities) {
+      const product: any = catalog.get(productId);
+      if (quantity > Number(product?.stock || 0)) throw new Error('There is not enough overall stock for ' + String(product?.name || 'this item') + '.');
+    }
+    for (const [sizeKey, quantity] of sizeQuantities) {
+      const [productId, size] = JSON.parse(sizeKey) as [string, string];
+      const product: any = catalog.get(productId);
+      const perSizeStock = product?.size_stock && Object.prototype.hasOwnProperty.call(product.size_stock, size)
+        ? Number(product.size_stock[size])
+        : Number(product?.stock || 0);
+      if (quantity > perSizeStock) throw new Error('There is not enough stock for ' + String(product?.name || 'this item') + ' in size ' + size + '.');
+    }
+    let subtotal = 0;
+    const items = requested.map((item: any) => {
+      const product: any = catalog.get(item.productId);
       subtotal += Number(product.price) * item.qty;
-      return { productId: item.productId, name: String(product.name), size: item.size, qty: item.qty, price: Number(product.price) };
+      return { productId: item.productId, name: String(product.name), size: item.size, color: item.color || null, qty: item.qty, price: Number(product.price) };
     });
 
     const promoCode = String(body?.promoCode || '').trim().toUpperCase();
@@ -107,30 +149,28 @@ export async function POST(req: Request) {
 
     reference = 'EBN-' + randomUUID();
     await pool.query(
-      `INSERT INTO public.ebnimaam_orders
+      \`INSERT INTO public.ebnimaam_orders
        (reference,auth_user_id,customer_email,customer_name,customer_phone,address,amount_kobo,currency,status,fulfilment_status,items,payment_provider,created_at,updated_at)
-       VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,'NGN','pending','processing',$8::jsonb,'paystack',NOW(),NOW())`,
+       VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,'NGN','pending','processing',$8::jsonb,'paystack',NOW(),NOW())\`,
       [
-        reference, String(user.id), String(user.email).trim().toLowerCase(),
-        String(body?.customer?.name || user.name || '').trim().slice(0, 120),
-        String(body?.customer?.phone || '').trim().slice(0, 40),
+        reference, verifiedUser ? verifiedUser.id : null, customerEmail, customerName, customerPhone,
         JSON.stringify({ country: 'Nigeria', state, city, street, postal: String(address.postal || '').slice(0, 30), delivery_fee: deliveryFee, subtotal, discount, promo_code: discount ? promoCode : null }),
         amountKobo, JSON.stringify(items),
       ],
     );
     await pool.query(
       'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
-      [reference, 'pending', 'Order created; awaiting Paystack confirmation.', String(user.id)],
+      [reference, 'pending', verifiedUser ? 'Order created by a verified customer; awaiting Paystack confirmation.' : 'Guest order created; awaiting Paystack confirmation.', verifiedUser ? verifiedUser.id : 'guest'],
     );
 
     const paymentResponse = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + process.env.PAYSTACK_SECRET_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: String(user.email).trim(),
+        email: customerEmail,
         amount: amountKobo,
         reference,
-        metadata: { order_reference: reference, delivery_fee: deliveryFee, subtotal, discount },
+        metadata: { order_reference: reference, delivery_fee: deliveryFee, subtotal, discount, customer_type: verifiedUser ? 'account' : 'guest' },
         callback_url: new URL('/payment-return.html', req.url).toString(),
       }),
       cache: 'no-store',
@@ -138,17 +178,13 @@ export async function POST(req: Request) {
     const paymentData = await paymentResponse.json().catch(() => null);
     if (!paymentResponse.ok || !paymentData?.status || !paymentData?.data?.authorization_url) {
       const message = String(paymentData?.message || 'Paystack could not initialize this payment.');
-      await pool.query(
-        'UPDATE public.ebnimaam_orders SET status=$1,updated_at=NOW() WHERE reference=$2',
-        ['initialization_failed', reference],
-      );
+      await pool.query('UPDATE public.ebnimaam_orders SET status=$1,updated_at=NOW() WHERE reference=$2', ['initialization_failed', reference]);
       await pool.query(
         'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
         [reference, 'initialization_failed', message.slice(0, 500), 'paystack'],
       );
       return NextResponse.json({ error: message }, { status: 502 });
     }
-
     return NextResponse.json({ authorization_url: paymentData.data.authorization_url, reference });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Payment initialization failed.' }, { status: reference ? 502 : 400 });
