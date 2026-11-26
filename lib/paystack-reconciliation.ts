@@ -127,7 +127,8 @@ export async function verifyAndReconcilePaystack(
           'SELECT id,stock,size_stock FROM public.ebnimaam_products WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',
           [productIds],
         );
-        productsById = new Map(stockRows.rows.map((row: any) => [String(row.id), row]));
+        productsById = new Map<string, any>();
+        for (const row of stockRows.rows as any[]) productsById.set(String(row.id), row);
         if (productsById.size !== productIds.length) stockIssue = true;
 
         for (const [productId, quantity] of productTotals) {
