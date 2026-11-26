@@ -13,9 +13,9 @@ async function init() {
     gallery JSONB NOT NULL DEFAULT '[]'::jsonb,size_stock JSONB NOT NULL DEFAULT '{}'::jsonb,
     product_details JSONB NOT NULL DEFAULT '{}'::jsonb)`);
   await pool.query('ALTER TABLE public.ebnimaam_products ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT FALSE');
-  await pool.query(\"ALTER TABLE public.ebnimaam_products ADD COLUMN IF NOT EXISTS gallery JSONB NOT NULL DEFAULT '[]'::jsonb\");
-  await pool.query(\"ALTER TABLE public.ebnimaam_products ADD COLUMN IF NOT EXISTS size_stock JSONB NOT NULL DEFAULT '{}'::jsonb\");
-  await pool.query(\"ALTER TABLE public.ebnimaam_products ADD COLUMN IF NOT EXISTS product_details JSONB NOT NULL DEFAULT '{}'::jsonb\");
+  await pool.query("ALTER TABLE public.ebnimaam_products ADD COLUMN IF NOT EXISTS gallery JSONB NOT NULL DEFAULT '[]'::jsonb");
+  await pool.query("ALTER TABLE public.ebnimaam_products ADD COLUMN IF NOT EXISTS size_stock JSONB NOT NULL DEFAULT '{}'::jsonb");
+  await pool.query("ALTER TABLE public.ebnimaam_products ADD COLUMN IF NOT EXISTS product_details JSONB NOT NULL DEFAULT '{}'::jsonb");
 }
 function safeImage(value: unknown) {
   const image = String(value || '').trim();
