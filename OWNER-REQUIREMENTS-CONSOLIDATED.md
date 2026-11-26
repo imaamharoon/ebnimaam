@@ -339,3 +339,29 @@ Nigeria-only operations; Paystack-only; authenticated checkout; no Facebook/soci
 - Test account signup/OTP on the production domain using an owner-controlled test inbox; no new customer account was created during this change.
 - The public product API still returns an empty catalogue. Do not invent product data or alter existing inventory.
 - No Paystack transaction, customer/order/payment mutation, billing change or database record edit was performed.
+
+
+## 25. Account-first access and PDF information exports — 26 November 2026
+
+### Customer experience updates
+- The integrated storefront opens the customer account panel before the visitor can browse or shop. A verified sign-in is required before the panel can be dismissed; signing out restores the account gate.
+- New visitors are shown the Create account tab first. Existing verified customers can sign in and return to the storefront.
+- The existing registration form, server-generated human-verification challenge, email verification, sign-in, session handling and two-minute signup retry limit are preserved.
+- The app-install/download control and its status message are hidden while the website is running as an installed PWA or native Capacitor application. Browser visitors retain the appropriate installation affordance.
+- Customer profile editing continues to save and reload the name, phone, and Nigeria delivery address through the existing profile API.
+- Customer information export is a server-generated PDF containing the verified customer's saved profile, delivery addresses, preferences and linked order history. When no profile information or linked order history exists, the account shows "You have no information yet."
+- Account removal itself is not presented as an active self-service feature. Customers can download their PDF before contacting support about a data-removal request.
+
+### Administrator export
+- The authenticated admin dashboard has a full website information PDF export.
+- The report includes all application-owned database rows for customer profiles, orders, order history, products/inventory, news/announcements, store settings/social profile URLs and payment reconciliation events if the relevant table exists.
+- Credentials, session cookies, security tokens, rate-limit keys and uploaded image binaries are excluded. Authentication-provider internal records remain outside the application database export.
+- The existing customer CSV export remains available.
+
+### Social media account inputs
+- Admin Store Settings retains HTTPS URL fields for Instagram, Facebook, TikTok, YouTube and X.
+- The public storefront displays official links only after the owner supplies and saves the actual profile URLs. No handles or URLs are fabricated.
+
+### Verification status
+- The source change must pass the new preview build, PDF route behavior and account-gate checks before production promotion.
+- The existing Paystack integration, customer signup verification backend, two-minute signup cooldown and customer profile persistence were intentionally left unchanged.
