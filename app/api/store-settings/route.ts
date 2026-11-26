@@ -7,6 +7,32 @@ const defaultFees: Record<string, number> = {
   Plateau:1500,'FCT - Abuja':3500,Kano:3500,Kaduna:3500,Nasarawa:3500,Bauchi:3500,
   Lagos:4500,Ogun:4500,Oyo:4500,Rivers:4500,default:5000,
 };
+const socialHosts: Record<string, string[]> = {
+  instagram:['instagram.com'],
+  facebook:['facebook.com','fb.com','fb.me'],
+  tiktok:['tiktok.com'],
+  youtube:['youtube.com','youtu.be'],
+  x:['x.com','twitter.com'],
+};
+function normalizeSocialLinks(input: unknown) {
+  if (input == null) return {};
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Social profile links must be valid URLs.');
+  const source = input as Record<string, unknown>;
+  const normalized: Record<string, string> = {};
+  for (const [platform, hosts] of Object.entries(socialHosts)) {
+    const value = String(source[platform] ?? '').trim();
+    if (!value) continue;
+    let url: URL;
+    try { url = new URL(value); } catch { throw new Error('Enter a full HTTPS profile URL for ' + platform + '.'); }
+    const hostname = url.hostname.toLowerCase();
+    const allowedHost = hosts.some((host) => hostname === host || hostname.endsWith('.' + host));
+    if (url.protocol !== 'https:' || url.username || url.password || !allowedHost || !url.pathname || url.pathname === '/') {
+      throw new Error('Enter a valid HTTPS ' + platform + ' profile URL.');
+    }
+    normalized[platform] = url.toString();
+  }
+  return normalized;
+}
 const defaultSettings = {
   storeName:'ebnimaam',country:'Nigeria',deliveryCountries:['Nigeria'],deliveryFeesByState:defaultFees,
   pickupAddress:'',pickupHours:'',holidayExceptions:'',deliveryRules:'',
@@ -50,12 +76,14 @@ export async function PUT(req: Request) {
       }
       deliveryFeesByState[state] = value;
     }
+    const socialLinks = normalizeSocialLinks(body.socialLinks);
     const allowed = {
       ...defaultSettings,
       ...body,
       country:'Nigeria',
       deliveryCountries:['Nigeria'],
       deliveryFeesByState,
+      socialLinks,
     };
     await pool.query('UPDATE public.ebnimaam_store_settings SET settings=$1::jsonb,updated_at=NOW() WHERE id=1',[JSON.stringify(allowed)]);
     return NextResponse.json({ ok: true });
