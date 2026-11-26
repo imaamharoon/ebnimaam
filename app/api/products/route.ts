@@ -6,12 +6,12 @@ import { isAdminRequest } from '../../../lib/admin-auth';
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 async function init() {
-  await pool.query(\`CREATE TABLE IF NOT EXISTS public.ebnimaam_products(
+  await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_products(
     id TEXT PRIMARY KEY,name TEXT NOT NULL,category TEXT NOT NULL,price INTEGER NOT NULL,
     description TEXT,image TEXT NOT NULL,tag TEXT,sizes JSONB,stock INTEGER NOT NULL DEFAULT 0,
     is_active BOOLEAN NOT NULL DEFAULT FALSE,updated_at TIMESTAMPTZ DEFAULT NOW(),
     gallery JSONB NOT NULL DEFAULT '[]'::jsonb,size_stock JSONB NOT NULL DEFAULT '{}'::jsonb,
-    product_details JSONB NOT NULL DEFAULT '{}'::jsonb)\`);
+    product_details JSONB NOT NULL DEFAULT '{}'::jsonb)`);
   await pool.query('ALTER TABLE public.ebnimaam_products ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT FALSE');
   await pool.query(\"ALTER TABLE public.ebnimaam_products ADD COLUMN IF NOT EXISTS gallery JSONB NOT NULL DEFAULT '[]'::jsonb\");
   await pool.query(\"ALTER TABLE public.ebnimaam_products ADD COLUMN IF NOT EXISTS size_stock JSONB NOT NULL DEFAULT '{}'::jsonb\");
@@ -107,10 +107,10 @@ export async function POST(req: Request) {
     }
     const details = normalizeDetails(product.product_details);
     await pool.query(
-      \`INSERT INTO public.ebnimaam_products(id,name,category,price,description,image,tag,sizes,stock,is_active,gallery,size_stock,product_details)
+      `INSERT INTO public.ebnimaam_products(id,name,category,price,description,image,tag,sizes,stock,is_active,gallery,size_stock,product_details)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11::jsonb,$12::jsonb,$13::jsonb)
        ON CONFLICT(id) DO UPDATE SET name=$2,category=$3,price=$4,description=$5,image=$6,tag=$7,
-       sizes=$8::jsonb,stock=$9,is_active=$10,updated_at=NOW(),gallery=$11::jsonb,size_stock=$12::jsonb,product_details=$13::jsonb\`,
+       sizes=$8::jsonb,stock=$9,is_active=$10,updated_at=NOW(),gallery=$11::jsonb,size_stock=$12::jsonb,product_details=$13::jsonb`,
       [id,name,category,price,description,image,String(product.tag || '').slice(0, 60),JSON.stringify(sizes),stock,active,JSON.stringify(gallery),JSON.stringify(sizeStock),JSON.stringify(details)],
     );
     return NextResponse.json({ ok: true, id, is_active: active });

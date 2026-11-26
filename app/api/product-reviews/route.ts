@@ -17,7 +17,7 @@ async function customer(req: Request) {
   return user as { id: string; email: string; name?: string; emailVerified?: boolean };
 }
 async function init() {
-  await pool.query(\`CREATE TABLE IF NOT EXISTS public.ebnimaam_product_reviews(
+  await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_product_reviews(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     product_id TEXT NOT NULL REFERENCES public.ebnimaam_products(id) ON DELETE CASCADE,
     user_id TEXT NOT NULL,
@@ -28,7 +28,7 @@ async function init() {
     photo_url TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(product_id,user_id)
-  )\`);
+  )`);
 }
 export async function GET(req: Request) {
   try {
@@ -64,21 +64,21 @@ export async function POST(req: Request) {
       if (url.protocol !== 'https:' || url.username || url.password) return NextResponse.json({ error: 'Customer photo must use HTTPS.' }, { status: 400 });
     }
     const purchased = await pool.query(
-      \`SELECT 1 FROM public.ebnimaam_orders o
+      `SELECT 1 FROM public.ebnimaam_orders o
        WHERE o.status='paid'
          AND (o.auth_user_id=$1 OR (o.auth_user_id IS NULL AND LOWER(o.customer_email)=LOWER($2)))
          AND EXISTS (SELECT 1 FROM jsonb_array_elements(o.items) AS line WHERE line->>'productId'=$3)
-       LIMIT 1\`,
+       LIMIT 1`,
       [user.id, user.email, productId],
     );
     if (!purchased.rowCount) return NextResponse.json({ error: 'A verified paid order for this item is required before reviewing it.' }, { status: 403 });
     const profile = await pool.query('SELECT full_name FROM public.ebnimaam_customer_profiles WHERE user_id=$1', [user.id]);
     const customerName = String(profile.rows[0]?.full_name || user.name || 'Verified buyer').trim().slice(0, 80);
     await pool.query(
-      \`INSERT INTO public.ebnimaam_product_reviews(product_id,user_id,customer_name,rating,fit_feedback,comment,photo_url)
+      `INSERT INTO public.ebnimaam_product_reviews(product_id,user_id,customer_name,rating,fit_feedback,comment,photo_url)
        VALUES($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT(product_id,user_id) DO UPDATE SET customer_name=EXCLUDED.customer_name,rating=EXCLUDED.rating,
-       fit_feedback=EXCLUDED.fit_feedback,comment=EXCLUDED.comment,photo_url=EXCLUDED.photo_url,created_at=NOW()\`,
+       fit_feedback=EXCLUDED.fit_feedback,comment=EXCLUDED.comment,photo_url=EXCLUDED.photo_url,created_at=NOW()`,
       [productId, user.id, customerName, rating, fit, comment, photo || null],
     );
     return NextResponse.json({ ok: true });
