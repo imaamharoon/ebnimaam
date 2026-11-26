@@ -90,7 +90,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Remove duplicate product, size and colour lines and try again.' }, { status: 400 });
     }
 
-    const productIds = [...new Set(requested.map((item: any) => item.productId))];
+    const productIds = Array.from(new Set(requested.map((item: any) => item.productId)));
     const live = await pool.query(
       'SELECT id,name,price,stock,sizes,size_stock,product_details FROM public.ebnimaam_products WHERE id = ANY($1::text[]) AND is_active = TRUE',
       [productIds],
