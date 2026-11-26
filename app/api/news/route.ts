@@ -1,10 +1,57 @@
-import {NextResponse} from 'next/server';
-import {Pool} from 'pg';
-import {createHmac,timingSafeEqual} from 'crypto';
-const pool=new Pool({connectionString:process.env.DATABASE_URL});
-const secret=process.env.ADMIN_PASSWORD||'';
-function valid(req:Request){const m=(req.headers.get('cookie')||'').match(/ebn_admin=([^;]+)/);if(!m||!secret)return false;try{return timingSafeEqual(Buffer.from(m[1]),Buffer.from(createHmac('sha256',secret).update('ebnimaam-admin-session').digest('hex')))}catch{return false}}
-async function init(){await pool.query('CREATE TABLE IF NOT EXISTS ebnimaam_news(id TEXT PRIMARY KEY,title TEXT NOT NULL,content TEXT NOT NULL,image TEXT NOT NULL DEFAULT \'\',published BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())')}
-export async function GET(req:Request){try{await init();const admin=valid(req);const r=admin?await pool.query('SELECT * FROM ebnimaam_news ORDER BY created_at DESC'):await pool.query('SELECT * FROM ebnimaam_news WHERE published=TRUE ORDER BY created_at DESC');return NextResponse.json({news:r.rows})}catch{return NextResponse.json({error:'News unavailable',news:[]},{status:500})}}
-export async function POST(req:Request){if(!valid(req))return NextResponse.json({error:'Unauthorized'},{status:401});try{await init();const n=await req.json();if(!String(n.title||'').trim()||!String(n.content||'').trim())return NextResponse.json({error:'Title and news content are required.'},{status:400});const id=n.id||'news-'+crypto.randomUUID();await pool.query('INSERT INTO ebnimaam_news(id,title,content,image,published) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET title=$2,content=$3,image=$4,published=$5,updated_at=NOW()',[id,String(n.title).trim(),String(n.content).trim(),String(n.image||''),n.published!==false]);return NextResponse.json({ok:true,id})}catch(e:any){return NextResponse.json({error:e.message||'News save failed'},{status:500})}}
-export async function DELETE(req:Request){if(!valid(req))return NextResponse.json({error:'Unauthorized'},{status:401});try{await init();const {id}=await req.json();await pool.query('DELETE FROM ebnimaam_news WHERE id=$1',[id]);return NextResponse.json({ok:true})}catch{return NextResponse.json({error:'News delete failed'},{status:500})}}
+import { NextResponse } from 'next/server';
+import { Pool } from 'pg';
+import { isAdminRequest } from '../../../lib/admin-auth';
+export const runtime = 'nodejs';
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
+async function init() {
+  await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_news(
+    id TEXT PRIMARY KEY,title TEXT NOT NULL,content TEXT NOT NULL,image TEXT NOT NULL DEFAULT '',
+    published BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+}
+export async function GET(req: Request) {
+  try {
+    await init();
+    const admin = isAdminRequest(req);
+    const result = admin
+      ? await pool.query('SELECT * FROM public.ebnimaam_news ORDER BY created_at DESC')
+      : await pool.query('SELECT id,title,content,image,published,created_at,updated_at FROM public.ebnimaam_news WHERE published=TRUE ORDER BY created_at DESC');
+    return NextResponse.json({ news: result.rows }, { headers: { 'cache-control': 'no-store' } });
+  } catch {
+    return NextResponse.json({ error: 'News is temporarily unavailable.', news: [] }, { status: 503 });
+  }
+}
+export async function POST(req: Request) {
+  if (!isAdminRequest(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    await init();
+    const body = await req.json();
+    const title = String(body.title || '').trim().slice(0, 180);
+    const content = String(body.content || '').trim().slice(0, 12000);
+    const image = String(body.image || '').trim();
+    if (!title || !content) return NextResponse.json({ error: 'Headline and content are required.' }, { status: 400 });
+    if (image && !image.startsWith('https://') && !image.startsWith('data:image/')) return NextResponse.json({ error: 'News image must be HTTPS or an uploaded image.' }, { status: 400 });
+    if (image.length > 5_000_000) return NextResponse.json({ error: 'Image is too large.' }, { status: 400 });
+    const id = String(body.id || 'news-' + crypto.randomUUID());
+    const published = body.published !== false;
+    await pool.query(
+      `INSERT INTO public.ebnimaam_news(id,title,content,image,published)
+       VALUES($1,$2,$3,$4,$5)
+       ON CONFLICT(id) DO UPDATE SET title=$2,content=$3,image=$4,published=$5,updated_at=NOW()`,
+      [id,title,content,image,published],
+    );
+    return NextResponse.json({ ok: true, id });
+  } catch (error: any) {
+    return NextResponse.json({ error: error?.message || 'News save failed.' }, { status: 500 });
+  }
+}
+export async function DELETE(req: Request) {
+  if (!isAdminRequest(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const { id } = await req.json();
+    if (!id) return NextResponse.json({ error: 'News item ID is required.' }, { status: 400 });
+    await pool.query('DELETE FROM public.ebnimaam_news WHERE id=$1', [String(id)]);
+    return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json({ error: 'News delete failed.' }, { status: 500 });
+  }
+}
