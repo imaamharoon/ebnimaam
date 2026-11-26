@@ -100,33 +100,85 @@ export async function verifyAndReconcilePaystack(
     if (!alreadyProcessed) {
       let items: any[] = [];
       try { items = Array.isArray(order.items) ? order.items : JSON.parse(order.items || '[]'); } catch { items = []; }
-      let stockIssue = !Array.isArray(items) || items.length === 0;
       const normalised = (Array.isArray(items) ? items : []).map((item: any) => ({
-        productId: String(item.productId || ''),
-        qty: Number(item.qty),
+        productId: String(item?.productId || '').trim(),
+        size: String(item?.size || 'One Size').trim(),
+        qty: Number(item?.qty),
       }));
-      if (normalised.some((item) => !item.productId || !Number.isSafeInteger(item.qty) || item.qty < 1 || item.qty > 10)) {
-        stockIssue = true;
-      }
+      let stockIssue = !Array.isArray(items) || items.length === 0
+        || normalised.some((item) => !item.productId || !item.size || !Number.isSafeInteger(item.qty) || item.qty < 1 || item.qty > 10);
 
+      // Group quantities before checking stock. A cart may contain the same product/size
+      // on separate colour lines, so validating each line independently can oversell.
+      const productTotals = new Map<string, number>();
+      const sizeTotals = new Map<string, number>();
       if (!stockIssue) {
         for (const item of normalised) {
-          const stockRow = await client.query(
-            'SELECT stock FROM public.ebnimaam_products WHERE id=$1 FOR UPDATE',
-            [item.productId],
-          );
-          if (!stockRow.rowCount || Number(stockRow.rows[0].stock || 0) < item.qty) {
+          productTotals.set(item.productId, (productTotals.get(item.productId) || 0) + item.qty);
+          const key = JSON.stringify([item.productId, item.size]);
+          sizeTotals.set(key, (sizeTotals.get(key) || 0) + item.qty);
+        }
+      }
+
+      let productsById = new Map<string, any>();
+      if (!stockIssue) {
+        const productIds = Array.from(productTotals.keys()).sort();
+        const stockRows = await client.query(
+          'SELECT id,stock,size_stock FROM public.ebnimaam_products WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',
+          [productIds],
+        );
+        productsById = new Map(stockRows.rows.map((row: any) => [String(row.id), row]));
+        if (productsById.size !== productIds.length) stockIssue = true;
+
+        for (const [productId, quantity] of productTotals) {
+          const product: any = productsById.get(productId);
+          const overallStock = Number(product?.stock);
+          if (!product || !Number.isSafeInteger(overallStock) || overallStock < quantity) {
             stockIssue = true;
             break;
+          }
+        }
+
+        if (!stockIssue) {
+          for (const [key, quantity] of sizeTotals) {
+            const [productId, size] = JSON.parse(key) as [string, string];
+            const product: any = productsById.get(productId);
+            let sizeStock = product?.size_stock;
+            if (typeof sizeStock === 'string') {
+              try { sizeStock = JSON.parse(sizeStock); } catch { sizeStock = {}; }
+            }
+            if (sizeStock && typeof sizeStock === 'object' && !Array.isArray(sizeStock)
+              && Object.prototype.hasOwnProperty.call(sizeStock, size)) {
+              const available = Number(sizeStock[size]);
+              if (!Number.isSafeInteger(available) || available < quantity) {
+                stockIssue = true;
+                break;
+              }
+            }
           }
         }
       }
 
       if (!stockIssue) {
-        for (const item of normalised) {
+        // Products are locked in a stable order above. Decrement overall stock once
+        // per product and each tracked size by its aggregated quantity in one transaction.
+        for (const [productId, totalQuantity] of productTotals) {
+          const product: any = productsById.get(productId);
+          let sizeStock = product.size_stock;
+          if (typeof sizeStock === 'string') {
+            try { sizeStock = JSON.parse(sizeStock); } catch { sizeStock = {}; }
+          }
+          sizeStock = sizeStock && typeof sizeStock === 'object' && !Array.isArray(sizeStock)
+            ? { ...sizeStock }
+            : {};
+          for (const [key, quantity] of sizeTotals) {
+            const [groupProductId, size] = JSON.parse(key) as [string, string];
+            if (groupProductId !== productId || !Object.prototype.hasOwnProperty.call(sizeStock, size)) continue;
+            sizeStock[size] = Number(sizeStock[size]) - quantity;
+          }
           await client.query(
-            'UPDATE public.ebnimaam_products SET stock=stock-$1,updated_at=NOW() WHERE id=$2',
-            [item.qty,item.productId],
+            'UPDATE public.ebnimaam_products SET stock=stock-$1,size_stock=$2::jsonb,updated_at=NOW() WHERE id=$3',
+            [totalQuantity, JSON.stringify(sizeStock), productId],
           );
         }
       } else {
