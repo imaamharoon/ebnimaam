@@ -305,3 +305,37 @@ Nigeria-only operations; Paystack-only; authenticated checkout; no Facebook/soci
 - No product, inventory, customer, order or payment records were changed. Paystack settings, Vercel billing and the working customer account page were left unchanged.
 - Facebook external profile links are permitted by this owner update; Facebook/social sign-in remains disabled. No automated SMS or WhatsApp system messaging was introduced.
 - Remaining owner input: provide the official Instagram, Facebook, TikTok, YouTube and/or X profile URLs. Missing profiles should remain hidden rather than linking to guessed accounts.
+
+
+## 24. Signup, social and APK release verification — 26 November 2026
+
+### Published source and deployment
+- Final source/documentation commit `bb1fa352ddd1da1d91b4c121ef00c6cbf63ec69c` is deployed to the intended `ebnimaam` Vercel project as production deployment `dpl_7ftBYH7tU5Ckdzyu1qNa442AQA8d` — READY.
+- The official `ebnimaam.vercel.app` alias was read back and maps to `dpl_7ftBYH7tU5Ckdzyu1qNa442AQA8d`.
+- Production Next.js compilation and type checking passed, all 16 static pages were generated, and deployment completed.
+- Official-domain checks returned HTTP 200 for the home/storefront, account page, admin, signup challenge, anonymous session endpoint, store settings, product API, PWA resources and legal/track/payment-return pages.
+
+### Signup cooldown
+- Email account-creation rate limit remains five attempts, with a two-minute window and `Retry-After: 120`.
+- Signup human-verification challenge refresh remains limited to 12 requests, also with a two-minute retry window and a two-minute error message.
+- Sign-in, OTP send/verification, password reset and other unrelated rate-limit windows remain unchanged.
+- The existing `public/account.html` was not modified; its blob SHA remains `e3bfd5041302e25cbd5cdef6524d2d1bd0d70e73`. No change was made to the working account creation UI or verification flow.
+
+### Social logos
+- The public footer now contains logo-only external profile links for Instagram, Facebook, TikTok, YouTube and X. There are no visible platform names or hover titles; accessible labels remain for assistive technology.
+- Admin Store Settings includes HTTPS profile URL fields, and the API validates platform-specific domains before saving.
+- Production `socialLinks` remains empty. The public icon row is therefore intentionally hidden until the owner supplies the real profile URLs. No handles were guessed. External Facebook links do not enable Facebook/social sign-in; social login remains disabled.
+
+### APK download and Android release
+- The production `Download app` control on Android requests the APK through same-origin `/api/download-app`. The endpoint streams the asset from the latest GitHub release and returns `application/vnd.android.package-archive` with `Content-Disposition: attachment; filename="ebnimaam-android.apk"`.
+- The endpoint was tested against the preview and official production domains. Both returned HTTP 200, APK content type and attachment headers; the returned body began with the ZIP/APK signature. The official website does not send visitors to a GitHub release page.
+- GitHub Actions run `45842762291` (run 71) completed successfully for application commit `decf316ea21eb14e76ad610e83fd472ee6de41b9`. Next.js build verification, Capacitor setup, branded icons, Android wrapper, Gradle APK assembly and release upload all succeeded.
+- Latest release is `android-apk-71`: https://github.com/imaamharoon/ebnimaam/releases/tag/android-apk-71. APK asset: https://github.com/imaamharoon/ebnimaam/releases/download/android-apk-71/app-debug.apk; 5,484,028 bytes; SHA-256 `5c4b58b5592aa54760b8fcf39b8c8810b1a95296023be47238af130339ee8052`.
+- This APK is still a debug/sideload build, not Play Store-signed, and has not been installed on a physical device. Android may automatically open its package installer when the browser is permitted to install from that source; otherwise the user must open the downloaded APK and approve installation. The website does not bypass Android's source permission or installer confirmation.
+
+### Remaining owner/device checks
+- Supply the official Instagram, Facebook, TikTok, YouTube and/or X profile URLs to make those icons visible and clickable.
+- Perform one real-device Android download/install check, including Android's per-source install permission where required.
+- Test account signup/OTP on the production domain using an owner-controlled test inbox; no new customer account was created during this change.
+- The public product API still returns an empty catalogue. Do not invent product data or alter existing inventory.
+- No Paystack transaction, customer/order/payment mutation, billing change or database record edit was performed.
