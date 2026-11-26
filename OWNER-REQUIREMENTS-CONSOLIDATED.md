@@ -266,3 +266,16 @@ Nigeria-only operation, Paystack-only payments, no guest checkout, no Facebook/s
 
 ### Safeguards retained
 Nigeria-only operations; Paystack-only; authenticated checkout; no Facebook/social login; no automated SMS/WhatsApp messages; no sample inventory; no real charges; no database record edits; no billing change.
+
+
+## 22. Official production publication — 26 November 2026
+
+- Production deployment `dpl_GiXHDf2KEHUGoeNNCNLio9HtkLAm` is READY on the existing `ebnimaam` project, source commit `d972e8fc6f923f589b6be11cb4daf0ae0ae07165` (branch `preview/mobile-header-refine`). The production build compiled, type-checked, generated all 16 static pages and completed deployment.
+- The official production alias `ebnimaam.vercel.app` was assigned to `dpl_GiXHDf2KEHUGoeNNCNLio9HtkLAm` and subsequently read back, confirming the alias maps to this deployment rather than the older deployment.
+- Official-domain HTTP checks returned 200 for the home/storefront, embedded customer account, admin dashboard, session endpoint, signup challenge, public catalogue API, store settings API, news API, order tracking, payment return, PWA manifest/service worker and privacy/returns/terms pages.
+- The public product catalogue endpoint still reports an empty published catalogue. No product, inventory, customer, order or payment rows were added or altered.
+- Paystack configuration and Vercel billing remain unchanged. No live or test transaction was initiated.
+- Production publication does not close the remaining end-to-end verification gates: actual customer registration/email OTP delivery and sign-in, real admin login, physical phone taps, installed PWA/Android behavior, and checkout/payment test-mode reconciliation remain untested. Do not describe these as passed.
+- Android debug APK `android-apk-63` is linked to the repaired remote production site. It is not Play Store signed and has not been installed on a physical device.
+
+**Release status:** repaired storefront/admin source is published to the official production domain. The software deployment is complete; public selling is still blocked on owner-approved catalogue data and end-to-end customer/payment/device verification.
