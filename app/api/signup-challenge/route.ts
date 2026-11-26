@@ -6,8 +6,8 @@ const secret = () => process.env.AUTH_SECRET || process.env.BETTER_AUTH_SECRET |
 const sign = (value: string, key: string) => createHmac('sha256', key).update(value).digest('base64url');
 export async function GET(req: Request) {
   try {
-    const allowed = await checkRateLimit(req, 'signup-challenge', 12, 15 * 60);
-    if (!allowed) return NextResponse.json({ error: 'Too many challenge requests. Please wait 15 minutes and try again.' }, { status: 429, headers: { 'retry-after': '900', 'cache-control': 'no-store' } });
+    const allowed = await checkRateLimit(req, 'signup-challenge', 12, 2 * 60);
+    if (!allowed) return NextResponse.json({ error: 'Too many challenge requests. Please wait 2 minutes and try again.' }, { status: 429, headers: { 'retry-after': '120', 'cache-control': 'no-store' } });
     const key = secret();
     if (!key) return NextResponse.json({ error: 'Signup verification is temporarily unavailable.' }, { status: 503 });
     const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
