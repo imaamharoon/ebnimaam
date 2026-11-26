@@ -149,9 +149,9 @@ export async function POST(req: Request) {
 
     reference = 'EBN-' + randomUUID();
     await pool.query(
-      \`INSERT INTO public.ebnimaam_orders
+      `INSERT INTO public.ebnimaam_orders
        (reference,auth_user_id,customer_email,customer_name,customer_phone,address,amount_kobo,currency,status,fulfilment_status,items,payment_provider,created_at,updated_at)
-       VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,'NGN','pending','processing',$8::jsonb,'paystack',NOW(),NOW())\`,
+       VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,'NGN','pending','processing',$8::jsonb,'paystack',NOW(),NOW())`,
       [
         reference, verifiedUser ? verifiedUser.id : null, customerEmail, customerName, customerPhone,
         JSON.stringify({ country: 'Nigeria', state, city, street, postal: String(address.postal || '').slice(0, 30), delivery_fee: deliveryFee, subtotal, discount, promo_code: discount ? promoCode : null }),
