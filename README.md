@@ -33,7 +33,9 @@ The public catalogue returns only products marked as published and with availabl
 
 ## Android app
 
-The Android workflow builds an APK from `main` and `preview/mobile-header-refine`. The APK is a branded Capacitor wrapper which loads the production storefront at `https://ebnimaam.vercel.app/store.html`; therefore it always uses the latest production website once that site is deployed. A new release is published from successful GitHub Actions runs.
+The Android workflow builds an APK from `main` and `preview/mobile-header-refine`. The APK is a branded Capacitor wrapper which loads the production storefront at `https://ebnimaam.vercel.app/store.html`; therefore it always uses the latest production website once that site is deployed. The storefront's Android `Download app` action starts a same-origin download through `/api/download-app`, which streams the APK from the latest successful GitHub release without showing an external release page. Android may still require the user to allow installs from the browser and confirm installation. A new release is published from successful GitHub Actions runs.
+
+The public footer can show logo-only Instagram, Facebook, TikTok, YouTube and X links. Their profile URLs are saved under Admin → Store settings → Social profile links. Only URLs on the matching HTTPS platform domains are accepted; unset profiles remain hidden. These are external profile links, not social-login providers.
 
 ## Development
 
