@@ -242,3 +242,27 @@ This addendum supersedes the older deployment statement in section 13 and record
 
 ### Scope safeguards
 Nigeria-only operation, Paystack-only payments, no guest checkout, no Facebook/social login, no SMS/WhatsApp automated system messages, no invented catalogue data, no live payment charges, and no Vercel billing changes remain in force.
+
+
+## 21. Corrected admin type check and Android release — 26 November 2026
+
+### Additional code correction
+- Admin restoration commit `6f32db4168326a8d6ec41c900fa67c4dfe42c02b` initially exposed a TypeScript error because the optional `silent` boolean parameter was passed directly as a button click handler. Commit `021370030e500b3c6368a3d5e469f110d01d1429` fixes this with an event-safe `() => load()` handler and uses `Promise.allSettled` for secondary dashboard data requests. This preserves a valid administrator session if an auxiliary catalogue, news or settings request fails.
+
+### Latest combined-source verification
+- Preview deployment `dpl_C3oQTfiYbURTT4fuQH6dqLaid3ST` for `021370030e500b3c6368a3d5e469f110d01d1429` reached READY. Next.js compilation and type checking passed; all 16 static pages and serverless API routes were generated successfully.
+- On this latest preview, the storefront home, `/store.html`, embedded customer account, `/admin`, `/track`, payment return, signup challenge, customer session endpoint, product/settings/news APIs, PWA manifest/service worker, icons and privacy/returns/terms pages returned HTTP 200.
+- The account panel open and close functions passed a focused mock-DOM behavior test: open state, iframe source, body scroll lock and restoration are correct. This is not a substitute for a physical browser tap test.
+- GitHub Actions run `45837824227` (run 63) completed successfully for source commit `021370030e500b3c6368a3d5e469f110d01d1429`. The production Next.js build, Capacitor setup, branded icon generation, Android wrapper, Gradle APK assembly and release upload all succeeded.
+- Debug APK release `android-apk-63` is published at https://github.com/imaamharoon/ebnimaam/releases/tag/android-apk-63. Asset: https://github.com/imaamharoon/ebnimaam/releases/download/android-apk-63/app-debug.apk (5,482,571 bytes). This is a sideload/debug APK, not a Play Store-signed release; physical-device install and sign-in/checkout testing remain pending.
+
+### Remaining production and launch gates
+- The corrected combined source is READY on the Vercel preview. Production release and official-domain alias verification must be recorded separately after the production deployment.
+- Customer registration and email OTP delivery have not been performed with an owner-controlled test inbox. No customer account was created in this work. Successful account-page rendering and an anonymous session response do not prove end-to-end account creation.
+- Live public catalogue remains empty. Do not publish the hidden legacy/test item or add invented products/stock.
+- Paystack was not modified; no live or test charge was made. Existing orders, payments, customers and inventory were not edited.
+- Actual mobile-device tapping, installed-PWA/Android testing, customer sign-up/sign-in and admin password/session testing still require real-device/owner-controlled tests.
+- Main and preview branch histories remain diverged. Do not force-merge PR #3; reconcile history separately after reviewing the current release candidate.
+
+### Safeguards retained
+Nigeria-only operations; Paystack-only; authenticated checkout; no Facebook/social login; no automated SMS/WhatsApp messages; no sample inventory; no real charges; no database record edits; no billing change.
