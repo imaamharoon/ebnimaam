@@ -217,3 +217,28 @@ This addendum supersedes the older deployment statement in section 13 and record
 - APK asset `app-debug.apk`: 5,481,736 bytes; SHA-256 `d9fe84e079cb8a9cdb325c5f6a1a1ac07cc77416fb700c8160105a7c7015a74c`; direct download https://github.com/imaamharoon/ebnimaam/releases/download/android-apk-50/app-debug.apk. GitHub reports the asset state as uploaded.
 - This remains a debug/sideload APK, not Play Store-signed, and it has not been installed on a physical device. The Capacitor remote server setting points to `https://ebnimaam.vercel.app/store.html`; that domain is still serving the older production deployment until the primary Vercel quota issue is resolved. Rebuild the APK after the official production deployment is updated and verify an installed-device sign-in/checkout journey.
 - The latest application source commit is `1587731e78107b91f18306dd7b388c54da60b788`; the CI audit note is documentation-only commit `65e505b9df89306222c31c72c335fd008d7ba67c`, and this APK release note is documentation-only commit `88c2c56c0beb0793561917dbfd59f4fee219256e`.
+
+
+## 20. Storefront interaction and admin session repair — 26 November 2026
+
+### Source fixes
+- Commit `ce5497c3ccaabec17c4860601f56debaadfd58ff` fixes two JavaScript syntax errors in `public/store.html`: a literal escaped newline between functions and a malformed quote-escaping function. These parse errors prevented the storefront's entire inline script from loading, so the Account, cart, product and navigation click handlers were unavailable. The corrected storefront script passes a JavaScript parser check.
+- A focused test of the account-panel functions confirms that opening adds the panel's `open` state, locks background scrolling and points the iframe at `/account.html?embedded=1`; closing removes the panel state and restores scrolling.
+- Commit `6f32db4168326a8d6ec41c900fa67c4dfe42c02b` updates `app/admin/page.tsx` to check the existing signed administrator session on dashboard load. A valid, unexpired session now restores the dashboard after refresh; an unauthenticated visitor remains on the sign-in screen.
+
+### Preview verification
+- Preview deployment `dpl_CntZCvkEGpKksMdZTRmgUeELTaQx` for commit `ce5497c3ccaabec17c4860601f56debaadfd58ff` reached READY. Next.js compilation, type checking, all 16 static pages, and API route generation completed successfully.
+- The preview storefront root and `/store.html`, embedded `/account.html`, `/admin`, `/track`, `/payment-return.html`, policy pages, PWA manifest/service worker and 192/512 icons returned HTTP 200.
+- Preview `/api/auth/get-session` returned HTTP 200 with a null user for an anonymous visitor. `/api/signup-challenge` returned HTTP 200. The public product API returned HTTP 200 with an empty catalogue. Store settings and news APIs returned HTTP 200.
+- The account-panel open/close behavior was tested against a DOM mock. No physical phone/browser tap test, real customer registration, email OTP delivery, successful customer login, admin sign-in, Paystack transaction or installed-PWA/Android device test has been performed.
+
+### Launch blockers retained
+- The preview build above predates the admin-session restoration commit; build and route checks for the new combined head are still pending.
+- Official production still needs a new deployment containing the storefront and admin fixes, followed by a fresh production-domain check.
+- No approved live products are currently available through the customer catalogue. Keep test/legacy inventory hidden; do not invent product names, prices, variants, images or quantities.
+- Email OTP delivery and end-to-end registration must be confirmed using an owner-controlled test inbox. No account was created during this audit.
+- Paystack configuration remains untouched; no real charge or order test was performed. Do not alter existing payment, order, customer or inventory data without verification and owner approval.
+- The existing Android wrapper points to the official production URL. A rebuilt APK and physical-device test are still required after the repaired production site is published.
+
+### Scope safeguards
+Nigeria-only operation, Paystack-only payments, no guest checkout, no Facebook/social login, no SMS/WhatsApp automated system messages, no invented catalogue data, no live payment charges, and no Vercel billing changes remain in force.
