@@ -33,8 +33,12 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
     try {
       const scope = signup ? 'auth-signup' : signin ? 'auth-signin' : otpSend ? 'email-otp-send' : otpVerify ? 'email-otp-verify' : passwordResetRequest ? 'auth-password-reset-request' : 'auth-password-reset';
       const limit = signup ? 5 : signin ? 20 : otpSend ? 5 : otpVerify ? 10 : passwordResetRequest ? 5 : 10;
-      const allowed = await checkRateLimit(req, scope, limit, 15 * 60);
-      if (!allowed) return NextResponse.json({ error: 'Too many attempts. Please wait 15 minutes before trying again.' }, { status: 429, headers: { 'retry-after': '900' } });
+      const windowSeconds = signup ? 2 * 60 : 15 * 60;
+      const allowed = await checkRateLimit(req, scope, limit, windowSeconds);
+      if (!allowed) {
+        const message = signup ? 'Too many account creation attempts. Please wait 2 minutes before trying again.' : 'Too many attempts. Please wait 15 minutes before trying again.';
+        return NextResponse.json({ error: message }, { status: 429, headers: { 'retry-after': String(windowSeconds) } });
+      }
     } catch {
       return NextResponse.json({ error: 'Authentication is temporarily unavailable. Please try again shortly.' }, { status: 503 });
     }
