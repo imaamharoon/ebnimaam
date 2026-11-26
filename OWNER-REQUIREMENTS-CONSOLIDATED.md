@@ -279,3 +279,29 @@ Nigeria-only operations; Paystack-only; authenticated checkout; no Facebook/soci
 - Android debug APK `android-apk-63` is linked to the repaired remote production site. It is not Play Store signed and has not been installed on a physical device.
 
 **Release status:** repaired storefront/admin source is published to the official production domain. The software deployment is complete; public selling is still blocked on owner-approved catalogue data and end-to-end customer/payment/device verification.
+
+
+## 23. Signup cooldown, social profile logos and same-domain APK download — 26 November 2026
+
+### Customer account protection
+- The existing working customer account page `public/account.html` was deliberately left unchanged (its blob remained `e3bfd5041302e25cbd5cdef6524d2d1bd0d70e73`).
+- Server-side email signup rate limiting remains at five attempts per IP, but its retry window is reduced from 15 minutes to 2 minutes. HTTP 429 responses now return a two-minute message and `Retry-After: 120`.
+- Signup anti-bot challenge refresh remains limited to 12 requests per IP, with its retry window also reduced to 2 minutes. The challenge remains signed, five-minute-expiring and single-use.
+- Sign-in, OTP send/verification, password-reset, checkout and other independent rate limits remain unchanged at their existing windows. This change does not disable rate limiting or change the customer registration UI.
+
+### Social profile logos
+- The storefront footer now has a logo-only social icon row for Instagram, Facebook, TikTok, YouTube and X. It displays only links whose URLs have been supplied and saved; visible captions/platform names are not shown on the public storefront.
+- Owner/admin settings now include profile URL fields for those five platforms. The store-settings API accepts only HTTPS URLs on the matching platform domains. The existing customer support WhatsApp contact remains separate.
+- The production store settings currently have an empty `socialLinks` object. No official public profile URLs were found in the repository or current site settings, so no handles were guessed or invented. The icons will become visible as each actual profile URL is saved by the owner.
+
+### Direct Android APK download
+- The storefront's Android Download app action now requests the APK from the same-origin route `/api/download-app`; it no longer redirects visitors to a GitHub Releases page or exposes an external asset link.
+- The endpoint streams the APK attached to the repository's latest published GitHub release, with an APK content type and attachment filename. The URL therefore follows the newest successful APK release without hard-coding an older version.
+- The page retains the existing PWA install path for non-Android devices. Android receives a download-start status message; the button does not claim a silent install.
+- Android may open the package installer automatically when the browser/source is allowed to install apps. Otherwise the user must open the downloaded APK and approve installation. Android's system controls unknown-source installation and user confirmation; a website cannot bypass those controls.
+- This source update must pass a fresh Vercel preview build, a same-origin APK download endpoint check, an Android APK workflow build and an official production deployment before being marked released.
+
+### Scope and protection
+- No product, inventory, customer, order or payment records were changed. Paystack settings, Vercel billing and the working customer account page were left unchanged.
+- Facebook external profile links are permitted by this owner update; Facebook/social sign-in remains disabled. No automated SMS or WhatsApp system messaging was introduced.
+- Remaining owner input: provide the official Instagram, Facebook, TikTok, YouTube and/or X profile URLs. Missing profiles should remain hidden rather than linking to guessed accounts.
