@@ -113,11 +113,11 @@ export async function POST(req: Request) {
       const colors = Array.isArray(product.product_details?.colors) ? product.product_details.colors.map((color: any) => String(color.name)) : [];
       if (item.color && colors.length && !colors.includes(item.color)) throw new Error('The selected colour for ' + String(product.name) + ' is no longer available.');
     }
-    for (const [productId, quantity] of productQuantities) {
+    for (const [productId, quantity] of Array.from(productQuantities.entries())) {
       const product: any = catalog.get(productId);
       if (quantity > Number(product?.stock || 0)) throw new Error('There is not enough overall stock for ' + String(product?.name || 'this item') + '.');
     }
-    for (const [sizeKey, quantity] of sizeQuantities) {
+    for (const [sizeKey, quantity] of Array.from(sizeQuantities.entries())) {
       const [productId, size] = JSON.parse(sizeKey) as [string, string];
       const product: any = catalog.get(productId);
       const perSizeStock = product?.size_stock && Object.prototype.hasOwnProperty.call(product.size_stock, size)
