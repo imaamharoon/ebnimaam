@@ -376,11 +376,11 @@ Nigeria-only operations; Paystack-only; authenticated checkout; no Facebook/soci
 - Product records now support additional gallery images, stock by size, colours, model height/size, fit, fabric/care details and a centimetre size chart. Admin product editing includes fields for this metadata.
 - Customer reviews are purchase-verified: only a signed-in, email-verified customer with a paid order for that product can submit one. Public ratings and customer photos are drawn only from submitted reviews; no fake ratings or sample customer images are shown.
 
-### Guest checkout
-- Account sign-in is optional for browsing and checkout; the automatic account gate has been removed. The account page remains available from the header for customers who want a profile and order history.
-- The checkout API accepts a guest's name, valid email, phone and Nigerian delivery address when no verified customer session exists. Verified signed-in customers can still check out against their account.
-- Product prices, availability, per-size stock, delivery fees and payment initialization remain server-validated. Paystack remains the payment provider and its secret key and reconciliation/webhook implementation have not been changed.
-- Guest orders are stored with a null auth user ID and the customer's supplied email, so existing reference/email order tracking can still identify them.
+### Verified-account checkout
+- Browsing remains available from the storefront, and the customer account opens in the integrated in-site panel. A verified customer sign-in is required before checkout; after successful sign-in the storefront resumes the customer's checkout and retains the cart.
+- The checkout API rejects requests without a verified Neon Auth user session. Guest orders are not accepted, and new checkout orders are linked to the authenticated customer account.
+- Product prices, availability, per-size stock, delivery fees and payment initialization remain server-validated. Paystack remains the only payment provider; its credentials, initialization flow and webhook configuration must remain unchanged.
+- Customer orders, order history and status tracking are exposed only through the appropriate verified customer/admin access paths.
 
 ### Customer support chat
 - The support widget is available on the storefront and product page. It uses a small vanilla JavaScript/CSS implementation, short conversation history, request limits and a WhatsApp handoff link derived from the store's saved support phone number.
@@ -397,3 +397,11 @@ Nigeria-only operations; Paystack-only; authenticated checkout; no Facebook/soci
 - No products, prices, images, reviews, customer accounts, order records or inventory were invented or inserted by this code update.
 - The owner must supply a Gemini API key to enable Gemini-generated answers rather than the included quick FAQ fallback, and should provide real product photographs, product copy, per-size stock and garment measurements through the admin editor before publishing catalogue items.
 - A custom transactional email provider and credentials are required before the saved HTML OTP template can be used for live outgoing emails.
+
+
+## 27. Payment inventory reconciliation hardening — 27 November 2026
+
+- Paystack success reconciliation now aggregates quantities by product and size before checking inventory, including multiple cart lines for the same product/size with different colours.
+- Product rows are locked in a stable product-ID order during reconciliation. Overall stock is decremented once per product and any configured per-size stock is decremented by the corresponding aggregated quantity in the same database transaction.
+- When a product, overall quantity or tracked size quantity cannot be confirmed, inventory is not decremented and the paid order is marked for owner stock review. The reconciliation remains idempotent for an already-paid order.
+- This is a source-code correction only. It does not edit existing orders, products, customer records, Paystack settings or payment history. A preview build and candidate-deployment verification are required before release.
