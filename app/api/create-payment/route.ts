@@ -51,16 +51,18 @@ export async function POST(req: Request) {
           }
         }
       } catch {
-        // A customer can continue as a guest if no verified session is available.
+        // Fail closed: checkout requires a verified account session.
       }
     }
 
-    const guestName = String(body?.customer?.name || '').trim().slice(0, 120);
-    const guestEmail = String(body?.customer?.email || '').trim().toLowerCase().slice(0, 254);
-    const guestPhone = String(body?.customer?.phone || '').trim().slice(0, 40);
-    const customerName = (verifiedUser ? (guestName || verifiedUser.name || '') : guestName).trim().slice(0, 120);
-    const customerEmail = (verifiedUser ? verifiedUser.email : guestEmail).trim().toLowerCase();
-    const customerPhone = guestPhone;
+    if (!verifiedUser) {
+      return NextResponse.json({ error: 'Please sign in to your Ebnimaam account before checkout.' }, { status: 401 });
+    }
+
+    const customerNameInput = String(body?.customer?.name || '').trim().slice(0, 120);
+    const customerPhone = String(body?.customer?.phone || '').trim().slice(0, 40);
+    const customerName = (customerNameInput || verifiedUser.name || '').trim().slice(0, 120);
+    const customerEmail = verifiedUser.email.trim().toLowerCase();
     if (customerName.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail) || customerPhone.replace(/\D/g, '').length < 7) {
       return NextResponse.json({ error: 'Enter your full name, a valid email address and a reachable phone number to continue.' }, { status: 400 });
     }
@@ -153,14 +155,14 @@ export async function POST(req: Request) {
        (reference,auth_user_id,customer_email,customer_name,customer_phone,address,amount_kobo,currency,status,fulfilment_status,items,payment_provider,created_at,updated_at)
        VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,'NGN','pending','processing',$8::jsonb,'paystack',NOW(),NOW())`,
       [
-        reference, verifiedUser ? verifiedUser.id : null, customerEmail, customerName, customerPhone,
+        reference, verifiedUser.id, customerEmail, customerName, customerPhone,
         JSON.stringify({ country: 'Nigeria', state, city, street, postal: String(address.postal || '').slice(0, 30), delivery_fee: deliveryFee, subtotal, discount, promo_code: discount ? promoCode : null }),
         amountKobo, JSON.stringify(items),
       ],
     );
     await pool.query(
       'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
-      [reference, 'pending', verifiedUser ? 'Order created by a verified customer; awaiting Paystack confirmation.' : 'Guest order created; awaiting Paystack confirmation.', verifiedUser ? verifiedUser.id : 'guest'],
+      [reference, 'pending', 'Order created by a verified customer; awaiting Paystack confirmation.', verifiedUser.id],
     );
 
     const paymentResponse = await fetch('https://api.paystack.co/transaction/initialize', {
@@ -170,7 +172,7 @@ export async function POST(req: Request) {
         email: customerEmail,
         amount: amountKobo,
         reference,
-        metadata: { order_reference: reference, delivery_fee: deliveryFee, subtotal, discount, customer_type: verifiedUser ? 'account' : 'guest' },
+        metadata: { order_reference: reference, delivery_fee: deliveryFee, subtotal, discount, customer_type: 'account' },
         callback_url: new URL('/payment-return.html', req.url).toString(),
       }),
       cache: 'no-store',
