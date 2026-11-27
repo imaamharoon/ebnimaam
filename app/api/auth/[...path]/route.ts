@@ -98,6 +98,7 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
       } catch { /* Upstream sign-out still proceeds. */ }
     }
     const upstream = await fetch(target, init);
+    const upstreamPayload = upstream.clone();
     const upstreamCookies = (upstream.headers as any).getSetCookie?.() || (upstream.headers.get('set-cookie') ? [upstream.headers.get('set-cookie')] : []);
     const response = new NextResponse(upstream.body, { status: upstream.status });
     for (const header of ['content-type', 'location', 'cache-control']) {
@@ -123,7 +124,7 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
     };
     const fetchSignedInUser = async () => {
       try {
-        const payload = await upstream.clone().json();
+        const payload = await upstreamPayload.clone().json();
         if (payload?.user?.id && payload?.user?.email) return payload.user;
       } catch { /* The provider may return an empty response. */ }
       const cookie = mergedCookieHeader();
