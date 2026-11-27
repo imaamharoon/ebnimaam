@@ -111,7 +111,7 @@ export async function sendOrderStatusEmail(reference: string, statusInput: strin
     return {deliveryStatus:'sent'};
   } catch (error:any) {
     const reason = String(error?.message||'Email delivery failed.').slice(0,400);
-    await pool.query('UPDATE public.ebnimaam_order_email_events SET delivery_status=''failed'',last_error=$1,updated_at=NOW() WHERE event_key=$2',[reason,eventKey]);
+    await pool.query("UPDATE public.ebnimaam_order_email_events SET delivery_status='failed',last_error=$1,updated_at=NOW() WHERE event_key=$2",[reason,eventKey]);
     return {deliveryStatus:'failed',reason};
   }
 }
