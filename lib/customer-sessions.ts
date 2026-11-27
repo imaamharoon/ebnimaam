@@ -74,10 +74,13 @@ async function sendNewDeviceEmail(email: string, label: string) {
         to: [email],
         subject: 'New sign-in to your Ebnimaam account',
         html: '<div style="font-family:Arial,sans-serif;line-height:1.6;color:#202a35"><h2 style="color:#102544">New sign-in detected</h2><p>Your Ebnimaam account was signed in from a new device:</p><p><strong>' + safeLabel + '</strong></p><p>If this was you, no action is needed. If you do not recognise this sign-in, reset your password immediately and contact Ebnimaam support.</p><p>Ebnimaam Security</p></div>',
+        text: 'New sign-in detected. Your Ebnimaam account was signed in from a new device: ' + label + '. If this was not you, reset your password immediately and contact Ebnimaam support.',
       }),
+      cache: 'no-store',
       signal: AbortSignal.timeout(8000),
     });
-    return response.ok ? 'sent' : 'failed';
+    const payload: any = await response.json().catch(() => ({}));
+    return response.ok && typeof payload?.id === 'string' && payload.id.length > 0 ? 'sent' : 'failed';
   } catch { return 'failed'; }
 }
 
