@@ -120,7 +120,7 @@ assert.ok(customerSupportRoute.includes('customer-support-write'));
 assert.ok(adminSupportRoute.includes('isAdminRequest'));
 assert.ok(adminSupportRoute.includes('recordAdminActivity'));
 assert.ok(productQuestionsRoute.includes('getVerifiedCustomer'));
-assert.ok(productQuestionsRoute.includes("status='pending'"));
+assert.ok(productQuestionsRoute.includes("VALUES($1,$2,$3,$4,'pending')"));
 assert.ok(adminProductQuestionsRoute.includes('isAdminRequest'));
 assert.ok(adminProductQuestionsRoute.includes('recordAdminActivity'));
 assert.ok(reviewReportRoute.includes('getVerifiedCustomer'));
