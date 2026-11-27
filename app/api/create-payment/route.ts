@@ -11,17 +11,11 @@ export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const authBase = (process.env.NEON_AUTH_BASE_URL || 'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neon.tech/ebnimaam/auth').replace(/\/$/, '');
 
-const deliveryFees: Record<string, number> = {
-  Plateau: 1500,
-  'FCT - Abuja': 3500, Kano: 3500, Kaduna: 3500, Nasarawa: 3500, Bauchi: 3500,
-  Lagos: 4500, Ogun: 4500, Oyo: 4500, Rivers: 4500,
-};
 const states = new Set([
   'Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno','Cross River','Delta','Ebonyi',
   'Edo','Ekiti','Enugu','FCT - Abuja','Gombe','Imo','Jigawa','Kaduna','Kano','Katsina','Kebbi','Kogi',
   'Kwara','Lagos','Nasarawa','Niger','Ogun','Ondo','Osun','Oyo','Plateau','Rivers','Sokoto','Taraba','Yobe','Zamfara'
 ]);
-function fallbackDelivery(state: string) { return deliveryFees[state] ?? 5000; }
 
 export async function POST(req: Request) {
   let reference = '';
@@ -154,9 +148,11 @@ export async function POST(req: Request) {
     if (fulfilmentMethod === 'pickup' && !pickupAddress) {
       return NextResponse.json({ error: 'Self-pickup is not available yet. Please contact Ebnimaam or choose home delivery.' }, { status: 409 });
     }
-    const deliveryFee = fulfilmentMethod === 'pickup'
-      ? 0
-      : Number(configuredFees[state] ?? configuredFees.default ?? fallbackDelivery(state));
+    const configuredDeliveryFee = configuredFees[state] ?? configuredFees.default;
+    if (fulfilmentMethod === 'delivery' && (configuredDeliveryFee === undefined || configuredDeliveryFee === null || configuredDeliveryFee === '')) {
+      return NextResponse.json({ error: 'Delivery to this state is not configured yet. Please contact Ebnimaam before placing your order.' }, { status: 409 });
+    }
+    const deliveryFee = fulfilmentMethod === 'pickup' ? 0 : Number(configuredDeliveryFee);
     if (!Number.isSafeInteger(deliveryFee) || deliveryFee < 0 || deliveryFee > 50000) throw new Error('Delivery fee configuration is invalid. Please contact the store.');
     const subtotalKobo = subtotal * 100;
     if (!Number.isSafeInteger(subtotalKobo) || subtotalKobo <= 0) throw new Error('The checkout subtotal is invalid.');
