@@ -1,5 +1,7 @@
 import { Pool } from 'pg';
 import { sendOrderStatusEmail } from './order-notifications';
+import { addWalletEntry, awardPaidReferral, ensureLoyaltySchema } from './loyalty';
+import { ensureCouponsSchema, finalizeCouponRedemption } from './coupons';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 type ReconcileResult =
@@ -48,11 +50,13 @@ export async function verifyAndReconcilePaystack(
     paid_at: tx.paid_at || null,
   };
 
+  await ensureLoyaltySchema(pool);
+  await ensureCouponsSchema(pool);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const locked = await client.query(
-      `SELECT reference,amount_kobo,status,fulfilment_status,items,provider_transaction_id,currency
+      `SELECT reference,auth_user_id,amount_kobo,status,fulfilment_status,items,provider_transaction_id,currency
        FROM public.ebnimaam_orders WHERE reference=$1 FOR UPDATE`,
       [reference],
     );
@@ -78,6 +82,10 @@ export async function verifyAndReconcilePaystack(
             [reference, transactionStatus, 'Paystack reported transaction status: ' + transactionStatus + '.', 'paystack'],
           );
         }
+      }
+      if (terminalFailureStatuses.has(transactionStatus) && order.status !== 'paid') {
+        await finalizeCouponRedemption(client,reference,false);
+        await client.query("UPDATE public.ebnimaam_wallet_reservations SET status='released',updated_at=NOW() WHERE reference=$1 AND status='reserved'",[reference]);
       }
       await client.query(
         `INSERT INTO public.ebnimaam_payment_events(reference,provider_event_id,provider_transaction_id,event_type,payload,processed_at)
@@ -220,12 +228,47 @@ export async function verifyAndReconcilePaystack(
       }
     }
 
+    // Apply checkout wallet credit only after Paystack verifies the remaining amount.
+    const walletReservation = await client.query(
+      "SELECT user_id,amount_kobo,status FROM public.ebnimaam_wallet_reservations WHERE reference=$1 FOR UPDATE",
+      [reference],
+    );
+    if (walletReservation.rowCount && walletReservation.rows[0].status === 'reserved') {
+      const reservation = walletReservation.rows[0];
+      if (!order.auth_user_id || String(reservation.user_id) !== String(order.auth_user_id)) {
+        throw new Error('The reserved wallet credit does not match the customer who owns this order.');
+      }
+      await addWalletEntry(client,{
+        userId:String(reservation.user_id),entryType:'checkout_spend',direction:'debit',
+        amountKobo:Number(reservation.amount_kobo),reference:'wallet-spend-'+reference,
+        description:'Ebnimaam balance applied to a verified paid order',
+        metadata:{orderReference:reference},
+      });
+      await client.query("UPDATE public.ebnimaam_wallet_reservations SET status='committed',updated_at=NOW() WHERE reference=$1",[reference]);
+    }
+    await finalizeCouponRedemption(client,reference,true);
     await client.query(
       `INSERT INTO public.ebnimaam_payment_events(reference,provider_event_id,provider_transaction_id,event_type,payload,processed_at)
        VALUES($1,$2,$3,$4,$5::jsonb,NOW()) ON CONFLICT(provider_event_id) DO NOTHING`,
       [reference,eventId,transactionId,eventName,JSON.stringify(safeEvent)],
     );
     await client.query('COMMIT');
+    // Referral credits are applied after the payment/order transaction commits. Loyalty failures must never undo a verified Paystack payment.
+    try {
+      await ensureLoyaltySchema(pool);
+      const loyaltyClient = await pool.connect();
+      try {
+        await loyaltyClient.query('BEGIN');
+        await awardPaidReferral(loyaltyClient, { reference, auth_user_id: order.auth_user_id, status: 'paid' });
+        await loyaltyClient.query('COMMIT');
+      } catch (loyaltyError) {
+        await loyaltyClient.query('ROLLBACK').catch(() => {});
+      } finally {
+        loyaltyClient.release();
+      }
+    } catch {
+      // The verified order remains paid; loyalty can be reviewed/retried without affecting payment reconciliation.
+    }
     if (!alreadyProcessed) {
       await sendOrderStatusEmail(reference, 'processing', process.env.NEXT_PUBLIC_SITE_URL || 'https://ebnimaam.vercel.app')
         .catch(() => ({ deliveryStatus: 'failed' }));

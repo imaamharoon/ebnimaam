@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 import { Pool } from 'pg';
+import nodemailer from 'nodemailer';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 3 });
 const validStatuses = new Set(['pending','processing','picked','shipped','delivered','cancelled','ready_for_pickup','collected','payment_failed']);
@@ -12,11 +13,12 @@ function html(value: unknown): string {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c] || c));
 }
 export function isOrderEmailConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM && process.env.AUTH_SECRET);
+  return Boolean(((process.env.SMTP_USER && process.env.SMTP_PASS) || process.env.BREVO_API_KEY || process.env.RESEND_API_KEY) && process.env.EMAIL_FROM && process.env.AUTH_SECRET);
 }
 export async function ensureOrderEmailEventsTable(): Promise<void> {
   await pool.query("CREATE TABLE IF NOT EXISTS public.ebnimaam_order_email_events (event_key TEXT PRIMARY KEY, reference TEXT NOT NULL, status_key TEXT NOT NULL, recipient TEXT NOT NULL, delivery_status TEXT NOT NULL DEFAULT 'pending', provider_message_id TEXT, last_error TEXT, attempt_count INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), sent_at TIMESTAMPTZ)");
   await pool.query('CREATE INDEX IF NOT EXISTS ebnimaam_order_email_events_reference_idx ON public.ebnimaam_order_email_events(reference, created_at DESC)');
+  await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS order_total_kobo BIGINT');
 }
 export function createOrderTrackingToken(reference: string): string {
   const secret = process.env.AUTH_SECRET || '';
@@ -43,7 +45,7 @@ function copyFor(status: string, pickup: boolean) {
     pending: { subject:'We received your Ebnimaam order', heading:'Your order has been received', message:'Your order has been saved and is awaiting Paystack payment confirmation. We will begin fulfilment once payment is verified.' },
     processing: { subject:'Your Ebnimaam payment is confirmed', heading:'Payment confirmed — we are preparing your order', message:'Paystack has confirmed your payment. Your order is now with our team for preparation. We will keep you updated as it moves through fulfilment.' },
     picked: { subject:'Your Ebnimaam items have been picked', heading:'Your items have been picked', message:pickup ? 'Our team has picked the items in your order and is preparing them for collection.' : 'Our team has picked the items in your order and is preparing them for dispatch.' },
-    shipped: { subject:'Your Ebnimaam order is on its way', heading:'Your order is on its way', message:'Your parcel has been handed to the delivery service. Follow the latest updates using your private tracking link.' },
+    shipped: { subject:'Your Ebnimaam order is on its way', heading:'Your order is on its way', message:'Your parcel has been handed to the delivery service. Sign in to your Ebnimaam account to view the latest updates.' },
     delivered: { subject:'Your Ebnimaam order has been delivered', heading:'Your order has been delivered', message:'Your Ebnimaam order has been marked as delivered. Thank you for shopping with us.' },
     cancelled: { subject:'An update about your Ebnimaam order', heading:'Your order has been cancelled', message:'Your order has been cancelled. Contact our store team if you need help or clarification.' },
     ready_for_pickup: { subject:'Your Ebnimaam order is ready for pickup', heading:'Your order is ready for collection', message:'Your order is ready. Please visit the pickup address during the stated collection hours.' },
@@ -56,7 +58,7 @@ export async function sendOrderStatusEmail(reference: string, statusInput: strin
   const status = String(statusInput || '').toLowerCase();
   if (!reference || !validStatuses.has(status)) return { deliveryStatus:'skipped', reason:'Unsupported status.' };
   await ensureOrderEmailEventsTable();
-  const found = await pool.query('SELECT o.reference,o.customer_email,o.customer_name,o.amount_kobo,o.status AS payment_status,o.address,o.items,s.settings FROM public.ebnimaam_orders o LEFT JOIN public.ebnimaam_store_settings s ON s.id=1 WHERE o.reference=$1',[reference]);
+  const found = await pool.query('SELECT o.reference,o.customer_email,o.customer_name,COALESCE(o.order_total_kobo,o.amount_kobo) AS amount_kobo,o.amount_kobo AS paystack_amount_kobo,o.status AS payment_status,o.address,o.items,s.settings FROM public.ebnimaam_orders o LEFT JOIN public.ebnimaam_store_settings s ON s.id=1 WHERE o.reference=$1',[reference]);
   if (!found.rowCount) return { deliveryStatus:'failed', reason:'Order not found.' };
   const order = found.rows[0];
   const address = parseObject(order.address);
@@ -71,24 +73,21 @@ export async function sendOrderStatusEmail(reference: string, statusInput: strin
     [eventKey, reference, status, recipient || 'unknown']
   );
   if (!claim.rowCount) return { deliveryStatus:'already_sent' };
-  const apiKey = process.env.RESEND_API_KEY || '';
+  const brevoKey = process.env.BREVO_API_KEY || '';
+  const resendKey = process.env.RESEND_API_KEY || '';
   const sender = process.env.EMAIL_FROM || '';
-  if (!apiKey || !sender || !process.env.AUTH_SECRET || !recipient) {
-    const reason = !recipient ? 'Customer email is missing.' : 'Email setup is incomplete. Configure RESEND_API_KEY and EMAIL_FROM in Vercel.';
+  const smtpUser = process.env.SMTP_USER || '';
+  const smtpPass = process.env.SMTP_PASS || '';
+  const provider = smtpUser && smtpPass ? 'smtp' : (brevoKey ? 'brevo' : (resendKey ? 'resend' : ''));
+  if (!provider || !sender || !process.env.AUTH_SECRET || !recipient) {
+    const reason = !recipient ? 'Customer email is missing.' : 'Email setup is incomplete. Configure SMTP_USER, SMTP_PASS and EMAIL_FROM in Vercel (or a supported API provider).';
     await pool.query('UPDATE public.ebnimaam_order_email_events SET delivery_status=$1,last_error=$2,updated_at=NOW() WHERE event_key=$3',[recipient?'not_configured':'failed',reason,eventKey]);
     return { deliveryStatus:recipient?'not_configured':'failed',reason };
   }
   let origin = '';
   try { const u = new URL(siteOrigin); if (!['https:','http:'].includes(u.protocol)) throw new Error(); origin = u.origin; }
   catch { return { deliveryStatus:'failed',reason:'Invalid tracking site URL.' }; }
-  let trackingUrl = '';
-  try {
-    trackingUrl = new URL('/track?token=' + encodeURIComponent(createOrderTrackingToken(reference)), origin).toString();
-  } catch {
-    const reason = 'Secure tracking token could not be created.';
-    await pool.query("UPDATE public.ebnimaam_order_email_events SET delivery_status='not_configured',last_error=$1,updated_at=NOW() WHERE event_key=$2",[reason,eventKey]);
-    return { deliveryStatus:'not_configured',reason };
-  }
+  const trackingUrl = new URL('/account.html?next=track&reference=' + encodeURIComponent(reference), origin).toString();
   const items = Array.isArray(order.items) ? order.items : (()=>{try{return JSON.parse(String(order.items||'[]'));}catch{return [];}})();
   const naira = new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN',maximumFractionDigits:0});
   const rows = (Array.isArray(items)?items:[]).map((item:any)=>'<tr><td style="padding:10px;border-bottom:1px solid #eee7dc">'+html(item.name||'Item')+' <small>'+html([item.size,item.color].filter(Boolean).join(' · '))+'</small></td><td style="padding:10px;text-align:right;border-bottom:1px solid #eee7dc">×'+html(item.qty||1)+'</td></tr>').join('');
@@ -98,17 +97,33 @@ export async function sendOrderStatusEmail(reference: string, statusInput: strin
     ? '<p><b>Collection:</b> Self-pickup — no delivery fee</p><p><b>Pickup address:</b> '+html(pickupAddress)+'</p><p><b>Pickup hours:</b> '+html(pickupHours||'Please confirm collection time with the store.')+'</p>'
     : '<p><b>Delivery destination:</b> '+html([address.city,address.state].filter(Boolean).join(', '))+'</p><p><b>Delivery fee:</b> '+html(naira.format(Number(address.delivery_fee||0)))+'</p>';
   const storeNote = String(note||'').trim().slice(0,500);
-  const body = '<!doctype html><html><body style="margin:0;background:#f7f5ef;font-family:Arial,sans-serif;color:#243348"><div style="max-width:620px;margin:28px auto;background:#fffefa;border:1px solid #e9e3d8"><header style="background:#102544;padding:26px 30px;color:#fff;font:22px Georgia,serif">ebnimaam</header><main style="padding:30px"><p>Hello '+html(order.customer_name||'there')+',</p><h1 style="font:normal 28px Georgia,serif;color:#102544">'+html(copy.heading)+'</h1><p style="line-height:1.8">'+html(copy.message)+'</p>'+(storeNote?'<p style="padding:12px;background:#f5f1e8;border-left:3px solid #c99550"><b>Store note:</b> '+html(storeNote)+'</p>':'')+'<section style="background:#f7f5ef;padding:18px;margin:22px 0"><b>Order '+html(reference)+'</b><p>Order total: '+html(naira.format(Number(order.amount_kobo||0)/100))+'</p><p>Payment status: '+html(order.payment_status||'pending')+'</p>'+fulfilment+'</section><table style="width:100%;border-collapse:collapse">'+rows+'</table><p style="text-align:center;margin:28px 0"><a href="'+html(trackingUrl)+'" style="display:inline-block;background:#102544;color:#fff;text-decoration:none;padding:15px 24px">TRACK MY ORDER</a></p><p style="font-size:12px;color:#78818b">This private tracking link expires in 90 days. For help: ebnimaam.com@gmail.com · WhatsApp 08145672755</p></main><footer style="padding:18px 30px;border-top:1px solid #eee7dc;color:#87909a">© '+new Date().getFullYear()+' ebnimaam · Everyday, elevated.</footer></div></body></html>';
+  const body = '<!doctype html><html><body style="margin:0;background:#f7f5ef;font-family:Arial,sans-serif;color:#243348"><div style="max-width:620px;margin:28px auto;background:#fffefa;border:1px solid #e9e3d8"><header style="background:#102544;padding:26px 30px;color:#fff;font:22px Georgia,serif">ebnimaam</header><main style="padding:30px"><p>Hello '+html(order.customer_name||'there')+',</p><h1 style="font:normal 28px Georgia,serif;color:#102544">'+html(copy.heading)+'</h1><p style="line-height:1.8">'+html(copy.message)+'</p>'+(storeNote?'<p style="padding:12px;background:#f5f1e8;border-left:3px solid #c99550"><b>Store note:</b> '+html(storeNote)+'</p>':'')+'<section style="background:#f7f5ef;padding:18px;margin:22px 0"><b>Order '+html(reference)+'</b><p>Order total: '+html(naira.format(Number(order.amount_kobo||0)/100))+'</p><p>Payment status: '+html(order.payment_status||'pending')+'</p>'+fulfilment+'</section><table style="width:100%;border-collapse:collapse">'+rows+'</table><p style="text-align:center;margin:28px 0"><a href="'+html(trackingUrl)+'" style="display:inline-block;background:#102544;color:#fff;text-decoration:none;padding:15px 24px">SIGN IN TO VIEW YOUR ORDER</a></p><p style="font-size:12px;color:#78818b">Sign in to your verified Ebnimaam account to view this order and its delivery details. This link alone does not reveal your order. For help: ebnimaam.com@gmail.com · WhatsApp 08145672755</p></main><footer style="padding:18px 30px;border-top:1px solid #eee7dc;color:#87909a">© '+new Date().getFullYear()+' ebnimaam · Everyday, elevated.</footer></div></body></html>';
   const textBody = ['Hello '+String(order.customer_name||'there'),copy.heading,copy.message,'Order: '+reference,'Total: '+naira.format(Number(order.amount_kobo||0)/100),pickup?'Self-pickup — no delivery fee':'Delivery fee: '+naira.format(Number(address.delivery_fee||0)),pickupAddress?'Pickup address: '+pickupAddress:'',pickupHours?'Pickup hours: '+pickupHours:'',storeNote?'Store note: '+storeNote:'','Track your order: '+trackingUrl].filter(Boolean).join('\n');
   try {
-    const response = await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+apiKey,'Content-Type':'application/json'},body:JSON.stringify({from:sender,to:[recipient],subject:copy.subject+' · '+reference,html:body,text:textBody}),cache:'no-store',signal:AbortSignal.timeout(10000)});
-    const payload = await response.json().catch(()=>({}));
-    if (!response.ok || !payload?.id) {
-      const reason = String(payload?.message||payload?.error||'Email provider could not accept the message.').slice(0,400);
+    let response: Response;
+    let payload: any;
+    if (provider === 'smtp') {
+      const port = Number(process.env.SMTP_PORT || 465);
+      const transport = nodemailer.createTransport({host:process.env.SMTP_HOST||'smtp.gmail.com',port,secure:port===465,auth:{user:smtpUser,pass:smtpPass}});
+      const info = await transport.sendMail({from:sender,to:recipient,subject:copy.subject+' · '+reference,html:body,text:textBody});
+      payload = {messageId:info.messageId};
+      response = new Response(JSON.stringify(payload),{status:info.accepted?.length ? 200 : 400});
+    } else if (provider === 'brevo') {
+      const match = sender.match(/^\\s*(.*?)\\s*<([^<>]+)>\\s*$/);
+      const senderEmail = match ? match[2].trim() : sender.trim();
+      const senderName = match ? match[1].replace(/^['\"]|['\"]$/g,'').trim() : 'Ebnimaam';
+      response = await fetch('https://api.brevo.com/v3/smtp/email',{method:'POST',headers:{'api-key':brevoKey,'Content-Type':'application/json','accept':'application/json'},body:JSON.stringify({sender:{email:senderEmail,name:senderName||'Ebnimaam'},to:[{email:recipient}],subject:copy.subject+' · '+reference,htmlContent:body,textContent:textBody}),cache:'no-store',signal:AbortSignal.timeout(10000)});
+    } else {
+      response = await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+resendKey,'Content-Type':'application/json'},body:JSON.stringify({from:sender,to:[recipient],subject:copy.subject+' · '+reference,html:body,text:textBody}),cache:'no-store',signal:AbortSignal.timeout(10000)});
+    }
+    payload = await response.json().catch(()=>({}));
+    const messageId = provider === 'smtp' ? payload?.messageId : (provider === 'brevo' ? payload?.messageId : payload?.id);
+    if (!response.ok || !messageId) {
+      const reason = String(payload?.message||payload?.error||payload?.code||'Email provider could not accept the message.').slice(0,400);
       await pool.query("UPDATE public.ebnimaam_order_email_events SET delivery_status='failed',last_error=$1,updated_at=NOW() WHERE event_key=$2",[reason,eventKey]);
       return {deliveryStatus:'failed',reason};
     }
-    await pool.query("UPDATE public.ebnimaam_order_email_events SET delivery_status='sent',provider_message_id=$1,last_error=NULL,sent_at=NOW(),updated_at=NOW() WHERE event_key=$2",[String(payload.id).slice(0,160),eventKey]);
+    await pool.query("UPDATE public.ebnimaam_order_email_events SET delivery_status='sent',provider_message_id=$1,last_error=NULL,sent_at=NOW(),updated_at=NOW() WHERE event_key=$2",[String(messageId).slice(0,160),eventKey]);
     return {deliveryStatus:'sent'};
   } catch (error:any) {
     const reason = String(error?.message||'Email delivery failed.').slice(0,400);

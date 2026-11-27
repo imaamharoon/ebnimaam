@@ -17,6 +17,8 @@ async function init() {
   await pool.query("ALTER TABLE public.ebnimaam_products ADD COLUMN IF NOT EXISTS gallery JSONB NOT NULL DEFAULT '[]'::jsonb");
   await pool.query("ALTER TABLE public.ebnimaam_products ADD COLUMN IF NOT EXISTS size_stock JSONB NOT NULL DEFAULT '{}'::jsonb");
   await pool.query("ALTER TABLE public.ebnimaam_products ADD COLUMN IF NOT EXISTS product_details JSONB NOT NULL DEFAULT '{}'::jsonb");
+  await pool.query("CREATE TABLE IF NOT EXISTS public.ebnimaam_stock_movements(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),product_id TEXT NOT NULL,product_name TEXT NOT NULL,variant TEXT,old_qty INTEGER NOT NULL,new_qty INTEGER NOT NULL,delta INTEGER NOT NULL,reason TEXT NOT NULL,actor TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+  await pool.query("CREATE INDEX IF NOT EXISTS ebnimaam_stock_movements_created_idx ON public.ebnimaam_stock_movements(created_at DESC)");
 }
 function safeImage(value: unknown) {
   const image = String(value || '').trim();
@@ -107,13 +109,45 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'The total of per-size stock cannot exceed the overall product stock.' }, { status: 400 });
     }
     const details = normalizeDetails(product.product_details);
-    await pool.query(
-      `INSERT INTO public.ebnimaam_products(id,name,category,price,description,image,tag,sizes,stock,is_active,gallery,size_stock,product_details)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11::jsonb,$12::jsonb,$13::jsonb)
-       ON CONFLICT(id) DO UPDATE SET name=$2,category=$3,price=$4,description=$5,image=$6,tag=$7,
-       sizes=$8::jsonb,stock=$9,is_active=$10,updated_at=NOW(),gallery=$11::jsonb,size_stock=$12::jsonb,product_details=$13::jsonb`,
-      [id,name,category,price,description,image,String(product.tag || '').slice(0, 60),JSON.stringify(sizes),stock,active,JSON.stringify(gallery),JSON.stringify(sizeStock),JSON.stringify(details)],
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const previous = await client.query('SELECT stock,size_stock FROM public.ebnimaam_products WHERE id=$1 FOR UPDATE',[id]);
+      const oldStock = previous.rowCount ? Number(previous.rows[0].stock) : 0;
+      let previousSizeStock: Record<string, number> = {};
+      const rawPreviousSizes = previous.rows[0]?.size_stock;
+      if (rawPreviousSizes && typeof rawPreviousSizes === 'object' && !Array.isArray(rawPreviousSizes)) previousSizeStock = rawPreviousSizes as Record<string, number>;
+      else if (typeof rawPreviousSizes === 'string') { try { previousSizeStock = JSON.parse(rawPreviousSizes); } catch { previousSizeStock = {}; } }
+      await client.query(
+        `INSERT INTO public.ebnimaam_products(id,name,category,price,description,image,tag,sizes,stock,is_active,gallery,size_stock,product_details)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11::jsonb,$12::jsonb,$13::jsonb)
+         ON CONFLICT(id) DO UPDATE SET name=$2,category=$3,price=$4,description=$5,image=$6,tag=$7,
+         sizes=$8::jsonb,stock=$9,is_active=$10,updated_at=NOW(),gallery=$11::jsonb,size_stock=$12::jsonb,product_details=$13::jsonb`,
+        [id,name,category,price,description,image,String(product.tag || '').slice(0, 60),JSON.stringify(sizes),stock,active,JSON.stringify(gallery),JSON.stringify(sizeStock),JSON.stringify(details)],
+      );
+      if (!previous.rowCount || oldStock !== stock) {
+        await client.query(
+          'INSERT INTO public.ebnimaam_stock_movements(product_id,product_name,variant,old_qty,new_qty,delta,reason,actor) VALUES($1,$2,NULL,$3,$4,$5,$6,$7)',
+          [id,name,oldStock,stock,stock-oldStock,previous.rowCount?'Product stock changed in the admin product editor':'Initial stock recorded when product was created','admin'],
+        );
+      }
+      const sizeNames = Array.from(new Set([...Object.keys(previousSizeStock),...Object.keys(sizeStock)]));
+      for (const size of sizeNames) {
+        const oldQty = Number(previousSizeStock[size] ?? 0), newQty = Number(sizeStock[size] ?? 0);
+        if (oldQty !== newQty) {
+          await client.query(
+            'INSERT INTO public.ebnimaam_stock_movements(product_id,product_name,variant,old_qty,new_qty,delta,reason,actor) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+            [id,name,size,oldQty,newQty,newQty-oldQty,'Variant stock changed in the admin product editor','admin'],
+          );
+        }
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(()=>{});
+      throw error;
+    } finally {
+      client.release();
+    }
     await recordAdminActivity('product.saved', 'product', id, { name });
     return NextResponse.json({ ok: true, id, is_active: active });
   } catch (error: any) {

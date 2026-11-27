@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { createTextPdf } from '../../../../lib/pdf';
+import { isCurrentCustomerSession } from '../../../../lib/customer-sessions';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const pool=new Pool({connectionString:process.env.DATABASE_URL,max:5});
@@ -10,6 +11,7 @@ async function customer(req:Request){
  const response=await fetch(authBase+'/get-session',{headers:{cookie,origin:new URL(req.url).origin},cache:'no-store'});
  if(!response.ok)return null;const data=await response.json();const user=data?.user;
  if(!user?.id||!user?.email||user.emailVerified!==true)return null;
+ if(!(await isCurrentCustomerSession(req,String(user.id))))return null;
  return user as {id:string;email:string;name?:string;emailVerified?:boolean};
 }
 export async function GET(req:Request){
@@ -17,8 +19,9 @@ export async function GET(req:Request){
   const user=await customer(req);
   if(!user)return NextResponse.json({error:'Please verify your email and sign in before downloading your information.'},{status:401});
   await pool.query("CREATE TABLE IF NOT EXISTS public.ebnimaam_customer_profiles(user_id TEXT PRIMARY KEY,email TEXT NOT NULL,full_name TEXT,phone TEXT,addresses JSONB NOT NULL DEFAULT '[]'::jsonb,preferences JSONB NOT NULL DEFAULT '{}'::jsonb,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
-  const profileResult=await pool.query('SELECT full_name,phone,addresses,preferences,created_at,updated_at FROM public.ebnimaam_customer_profiles WHERE user_id=$1',[user.id]);
-  const ordersResult=await pool.query("SELECT o.reference,o.amount_kobo,o.currency,o.status,o.fulfilment_status,o.items,o.created_at,o.paid_at,COALESCE((SELECT json_agg(json_build_object('status',h.status,'note',h.note,'created_at',h.created_at) ORDER BY h.created_at ASC) FROM public.ebnimaam_order_status_history h WHERE h.reference=o.reference),'[]'::json) AS history FROM public.ebnimaam_orders o WHERE o.auth_user_id=$1 OR (o.auth_user_id IS NULL AND LOWER(o.customer_email)=LOWER($2)) ORDER BY o.created_at DESC",[user.id,user.email]);
+  await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS order_total_kobo BIGINT');
+const profileResult=await pool.query('SELECT full_name,phone,addresses,preferences,created_at,updated_at FROM public.ebnimaam_customer_profiles WHERE user_id=$1',[user.id]);
+  const ordersResult=await pool.query("SELECT o.reference,COALESCE(o.order_total_kobo,o.amount_kobo) AS amount_kobo,o.amount_kobo AS paystack_amount_kobo,o.currency,o.status,o.fulfilment_status,o.items,o.created_at,o.paid_at,COALESCE((SELECT json_agg(json_build_object('status',h.status,'note',h.note,'created_at',h.created_at) ORDER BY h.created_at ASC) FROM public.ebnimaam_order_status_history h WHERE h.reference=o.reference),'[]'::json) AS history FROM public.ebnimaam_orders o WHERE o.auth_user_id=$1 OR (o.auth_user_id IS NULL AND LOWER(o.customer_email)=LOWER($2)) ORDER BY o.created_at DESC",[user.id,user.email]);
   const profile=profileResult.rows[0]||{};const addresses=Array.isArray(profile.addresses)?profile.addresses:[];const preferences=profile.preferences||{};
   const hasSavedProfile=!!(profile.full_name||profile.phone||addresses.length||Object.keys(preferences).length);
   if(!hasSavedProfile&&!ordersResult.rows.length)return NextResponse.json({error:'You have no information yet.'},{status:404,headers:{'cache-control':'no-store'}});

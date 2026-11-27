@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { checkRateLimit, consumeOneTimeChallenge } from '../../../../lib/rate-limit';
+import { activateCustomerSession, clearCustomerSessionCookies, hasCustomerSession, isCurrentCustomerSession, revokeCustomerSession } from '../../../../lib/customer-sessions';
 export const runtime = 'nodejs';
 const base = (process.env.NEON_AUTH_BASE_URL || 'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neon.tech/ebnimaam/auth').replace(/\/$/, '');
 const secret = () => process.env.AUTH_SECRET || process.env.BETTER_AUTH_SECRET || process.env.NEON_AUTH_SECRET;
@@ -88,21 +89,92 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
   if (body !== undefined) init.body = body;
 
   try {
+    const signingOut = req.method === 'POST' && endpoint === 'sign-out';
+    let previousUser: any = null;
+    if (signingOut) {
+      try {
+        const current = await fetch(base + '/get-session', { headers: { cookie: req.headers.get('cookie') || '', origin: url.origin }, cache: 'no-store' });
+        if (current.ok) previousUser = (await current.json())?.user || null;
+      } catch { /* Upstream sign-out still proceeds. */ }
+    }
     const upstream = await fetch(target, init);
+    const upstreamPayload = upstream.clone();
+    const upstreamCookies = (upstream.headers as any).getSetCookie?.() || (upstream.headers.get('set-cookie') ? [upstream.headers.get('set-cookie')] : []);
     const response = new NextResponse(upstream.body, { status: upstream.status });
     for (const header of ['content-type', 'location', 'cache-control']) {
       const value = upstream.headers.get(header);
       if (value) response.headers.set(header, value);
     }
-    const cookies = (upstream.headers as any).getSetCookie?.() || [];
-    if (cookies.length) {
-      for (const cookie of cookies) {
-        const local = cookie.replace(/;\s*Domain=[^;]*/ig, '').replace(/;\s*Path=[^;]*/ig, '; Path=/');
-        response.headers.append('set-cookie', local);
+    const mergedCookieHeader = () => {
+      const jar = new Map<string, string>();
+      for (const part of (req.headers.get('cookie') || '').split(';')) {
+        const index = part.indexOf('=');
+        if (index > 0) jar.set(part.slice(0, index).trim(), part.slice(index + 1).trim());
       }
-    } else {
-      const cookie = upstream.headers.get('set-cookie');
-      if (cookie) response.headers.append('set-cookie', cookie.replace(/;\s*Domain=[^;]*/ig, '').replace(/;\s*Path=[^;]*/ig, '; Path=/'));
+      for (const cookie of upstreamCookies) {
+        const value = String(cookie);
+        const first = value.split(';', 1)[0];
+        const index = first.indexOf('=');
+        if (index <= 0) continue;
+        const name = first.slice(0, index).trim();
+        if (/;\s*Max-Age=0(?:;|$)/i.test(value)) jar.delete(name);
+        else jar.set(name, first.slice(index + 1).trim());
+      }
+      return Array.from(jar.entries()).map(([name, value]) => name + '=' + value).join('; ');
+    };
+    const fetchSignedInUser = async () => {
+      try {
+        const payload = await upstreamPayload.clone().json();
+        if (payload?.user?.id && payload?.user?.email) return payload.user;
+      } catch { /* The provider may return an empty response. */ }
+      const cookie = mergedCookieHeader();
+      if (!cookie) return null;
+      try {
+        const current = await fetch(base + '/get-session', { headers: { cookie, origin: url.origin }, cache: 'no-store' });
+        if (!current.ok) return null;
+        const payload = await current.json();
+        return payload?.user?.id && payload?.user?.email ? payload.user : null;
+      } catch { return null; }
+    };
+    const loginSucceeded = (upstream.ok || (upstream.status >= 300 && upstream.status < 400)) && (
+      (req.method === 'POST' && (signin || otpVerify)) ||
+      (req.method === 'GET' && path[0] === 'callback')
+    );
+    if (loginSucceeded) {
+      const user = await fetchSignedInUser();
+      if (user?.emailVerified === true) {
+        try {
+          await activateCustomerSession(response, req, { id: String(user.id), email: String(user.email) });
+        } catch {
+          return NextResponse.json({ error: 'Secure sign-in setup is temporarily unavailable. Please try again shortly.' }, { status: 503, headers: { 'cache-control': 'no-store' } });
+        }
+      }
+    }
+    if (req.method === 'GET' && endpoint === 'get-session' && upstream.ok) {
+      const user = await fetchSignedInUser();
+      if (user?.id && user?.email && user.emailVerified === true) {
+        try {
+          if (await hasCustomerSession(String(user.id))) {
+            if (!(await isCurrentCustomerSession(req, String(user.id)))) {
+              const denied = NextResponse.json({ user: null, session: null }, { headers: { 'cache-control': 'no-store' } });
+              clearCustomerSessionCookies(denied);
+              return denied;
+            }
+          } else {
+            await activateCustomerSession(response, req, { id: String(user.id), email: String(user.email) });
+          }
+        } catch {
+          return NextResponse.json({ user: null, session: null }, { headers: { 'cache-control': 'no-store' } });
+        }
+      }
+    }
+    if (signingOut) {
+      if (previousUser?.id) await revokeCustomerSession(req, String(previousUser.id)).catch(() => {});
+      clearCustomerSessionCookies(response);
+    }
+    for (const cookie of upstreamCookies) {
+      const local = String(cookie).replace(/;\s*Domain=[^;]*/ig, '').replace(/;\s*Path=[^;]*/ig, '; Path=/');
+      response.headers.append('set-cookie', local);
     }
     if (signup) response.cookies.set('ebnimaam_signup_challenge', '', {
       httpOnly: true, secure: url.protocol === 'https:', sameSite: 'strict',

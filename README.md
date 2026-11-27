@@ -86,13 +86,42 @@ The owner manages order progress in Admin → Orders:
 
 Customer order emails are sent for initial pending status, successful payment/processing, payment failure, picked items, dispatch, delivery, ready for pickup, collection and cancellation. A private HMAC-signed tracking link is included in each email; it expires after 90 days. Notification events are logged and de-duplicated so repeated admin saves do not repeatedly email customers. Admin can inspect notification delivery history and retry the current status notification.
 
-### Transactional email provider
+### Transactional email provider (free option)
 
-Transactional order email uses the Resend HTTP API. Configure both values in the existing Vercel project as encrypted/sensitive environment variables for Production and Preview:
-- RESEND_API_KEY — the API key from the Ebnimaam Resend account.
-- EMAIL_FROM — a sender address on a domain verified in Resend (for example, a store-owned orders address).
+Order-notification email supports Brevo's free transactional API and Resend. Brevo is preferred when `BREVO_API_KEY` is present; Resend remains the fallback. Brevo advertises up to 300 emails/day on its free plan, but account and sender verification are required. Configure in Vercel:
+- `BREVO_API_KEY` — Brevo API key (recommended free tier).
+- `EMAIL_FROM` — sender identity approved/verified by Brevo (format: `Ebnimaam <sender@example.com>`).
+- `AUTH_SECRET` — required for signed tracking links.
 
-Keep AUTH_SECRET configured; it signs private tracking links. Do not put these secrets in GitHub, source code, browser code or chat. Email delivery remains marked not_configured until both provider variables and the tracking signing secret are present. Verify the sender domain and send a controlled test to the store owner's inbox before enabling customer notification in production. The existing account verification/OTP email configuration is separate from these transactional order messages.
+If Brevo is not configured, `RESEND_API_KEY` is used as a fallback. These variables must be configured in Vercel; do not put secrets in GitHub, source code, browser code or chat. Email events remain not_configured until the provider, sender and tracking secret are available. Verify sender identity and test a message to the owner's inbox before relying on customer notifications. Account verification/OTP email is separate and still depends on the Neon Auth SMTP setup.
 
 The internal tracking page shows database status history and checks for updates every 30 seconds while the private link is open. Customers can also use the existing order-reference plus checkout-email lookup as a fallback. It is not a courier GPS feed. For map-based live location, a delivery partner API or rider location integration is required; a secure courier tracking URL can be saved per order in Admin.
 
+
+## Rewards, wallet, coupons and customer discovery
+
+The rewards area is available at `/rewards.html` for verified signed-in customers. It shows the wallet ledger, referral progress, bank-refund requests and team challenges. Wallet entries are auditable credits/debits. Wallet credit is reserved when checkout begins and debited only after Paystack verifies the remaining payment. A failed Paystack transaction releases its reservation; an ambiguous initialization/network result remains reserved until its payment status can be verified.
+
+Referral reward settings are configured by the owner in Admin → Rewards, wallet & challenges. A referrer qualifies after **five different referred accounts** each complete a verified paid order; the referred customer receives their own welcome reward after their first verified paid order. Reward amounts default to zero until configured by the owner.
+
+Team challenges support 2–5 members, 2–21 day durations, named milestones and evidence submissions. Every member must complete every milestone and an administrator must approve each submission before the per-member reward is credited. Challenge calendar dates can be exported by the customer as an `.ics` file; the website does not read a private calendar.
+
+Coupons are managed in Admin → Coupons and validated on the server for status, expiry, minimum subtotal, per-account use and redemption limit. Redemption is counted only after verified Paystack payment. The owner chooses and publishes all coupon terms; no automatic or hard-coded discount is enabled.
+
+Customers can sync their wishlist across devices after signing in, see recommendations for related in-stock products and use photo or voice search from the storefront. Photo search requires the server-side `GEMINI_API_KEY`; image selection is limited to a user-initiated JPG/PNG/WebP upload under 3 MB. Voice input is initiated only when the customer taps the microphone/search control. The browser handles microphone/camera permission prompts.
+
+Ebnimaam AI can answer questions across the live catalogue, store settings, published news, policies and (for a verified signed-in customer) that customer's own recent order details and available wallet credit. It is read-only: order changes, refund approvals, wallet adjustments, coupon creation and challenge approvals still require the appropriate customer or admin workflow. Configure `GEMINI_API_KEY` in the Vercel environment for full AI responses; without it, the existing limited quick-help fallback is used.
+
+Refund credits are added to the Ebnimaam wallet by an administrator after approving the return. Customers may request a bank refund from their wallet page; the request is reserved for admin review. A bank transfer is marked paid only after the administrator has completed the transfer manually. No automatic bank payout or Paystack refund API is claimed.
+
+The admin dashboard refreshes order and inventory data periodically and shows active products that are low on stock or out of stock. WhatsApp remains a customer-initiated contact link; no automated WhatsApp or SMS messages are sent.
+
+
+## Account security and private order access
+
+- Customer accounts use one active Ebnimaam app session per account. A sign-in from a second device replaces the previous app session, and a browser/app installation cannot keep two customer accounts active at once.
+- New devices are recorded and trigger a security email to the verified account address when the Resend sender configuration is present. Configure `RESEND_API_KEY` and `EMAIL_FROM` in Vercel with a verified sender domain before relying on email alerts.
+- Checkout, customer profile reads/updates, payment-return verification, saved reviews and order tracking check the active device-bound customer session. An order reference or email address alone cannot reveal private order details.
+- The storefront includes a refresh control, mobile history-aware account/cart/checkout overlays and the owner-provided WhatsApp Channel follow link. Additional social handles are managed in Admin → Store settings.
+
+**Passkeys / fingerprint login:** The current Neon Managed Auth client does not expose passkey/WebAuthn or MFA plugins. These are not enabled in this release. A supported implementation requires a separately reviewed move to self-managed Better Auth (or another identity provider) with an existing-user and recovery migration plan; do not claim biometric login is active before that work is complete.

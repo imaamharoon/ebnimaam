@@ -1,5 +1,76 @@
-const CACHE_NAME='ebnimaam-shell-v5';
-const SHELL=['/store.html','/manifest.webmanifest','/assets/icon-192.png','/assets/icon-512.png','/assets/ebnimaam-app-icon-192.svg','/assets/ebnimaam-app-icon-512.svg'];
-self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()))});
-self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE_NAME).map(key=>caches.delete(key)))).then(()=>self.clients.claim()))});
-self.addEventListener('fetch',event=>{const req=event.request;if(req.method!=='GET'||new URL(req.url).origin!==self.location.origin)return;const url=new URL(req.url);if(url.pathname.startsWith('/api/'))return;if(req.mode==='navigate'){event.respondWith(fetch(req).then(response=>{if(response.ok){const copy=response.clone();caches.open(CACHE_NAME).then(cache=>cache.put(req,copy))}return response}).catch(()=>caches.match(req).then(cached=>cached||caches.match('/store.html'))));return}event.respondWith(caches.match(req).then(cached=>cached||fetch(req).then(response=>{if(response.ok){const copy=response.clone();caches.open(CACHE_NAME).then(cache=>cache.put(req,copy))}return response})));});
+const CACHE_NAME = 'ebnimaam-shell-v7';
+const CACHE_PREFIX = 'ebnimaam-shell-';
+const REQUIRED_SHELL = ['/store.html', '/offline.html', '/manifest.webmanifest'];
+const OPTIONAL_ASSETS = [
+  '/assets/icon-192.png',
+  '/assets/icon-512.png',
+  '/assets/ebnimaam-app-icon-192.svg',
+  '/assets/ebnimaam-app-icon-512.svg'
+];
+
+self.addEventListener('install', event => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await Promise.all(REQUIRED_SHELL.map(path => cache.add(path)));
+    await Promise.allSettled(OPTIONAL_ASSETS.map(path => cache.add(path)));
+    await self.skipWaiting();
+  })());
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys
+      .filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+      .map(key => caches.delete(key)));
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
+
+  if (request.mode === 'navigate') {
+    event.respondWith((async () => {
+      try {
+        const response = await fetch(request);
+        if (response.ok && url.pathname === '/store.html' && !url.search) {
+          const cache = await caches.open(CACHE_NAME);
+          await cache.put('/store.html', response.clone());
+        }
+        return response;
+      } catch {
+        if (url.pathname === '/store.html') {
+          const cachedStore = await caches.match('/store.html');
+          if (cachedStore) return cachedStore;
+        }
+        return (await caches.match('/offline.html')) || Response.error();
+      }
+    })());
+    return;
+  }
+
+  // Cache only public, versioned assets and the app manifest. Never cache account,
+  // admin, order, rewards, or API responses where personal data could be present.
+  const isPublicAsset = url.pathname.startsWith('/assets/')
+    || url.pathname.startsWith('/_next/static/')
+    || url.pathname === '/manifest.webmanifest';
+  if (!isPublicAsset || url.search) return;
+
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    const response = await fetch(request);
+    if (response.ok) await cache.put(request, response.clone());
+    return response;
+  })());
+});
+
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+});

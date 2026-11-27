@@ -1,33 +1,40 @@
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '../../../lib/rate-limit';
+import { Pool } from 'pg';
+import { ensureLoyaltySchema, getVerifiedCustomer, walletAvailable } from '../../../lib/loyalty';
+import { ensureCouponsSchema } from '../../../lib/coupons';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 4 });
 
 const STORE_INSTRUCTIONS = [
-  'You are the friendly, concise customer support assistant for ebnimaam, a Nigerian clothing and accessories brand.',
-  'Keep answers short, clear and easy to read on a phone screen. Use no more than 4 short sentences.',
-  'Sizing: sizes S, M, L, XL and XXL where a product offers them. Regular fit is generally true to size. Suggest sizing up for a looser look, or use the Size Guide & Fit Finder on the product page.',
-  'Delivery: nationwide delivery across Nigeria. Typical estimates are 1-3 working days in Jos, Abuja and Kano, and 2-5 working days to Lagos and other states. Actual delivery estimates can vary by destination.',
-  'Payments: secure checkout through Paystack (Card, Bank Transfer and USSD). Delivery is calculated by destination and shown before payment. Do not invent any additional fee.',
-  'Returns and exchanges: exchanges are accepted within 7 days of delivery if the item is unworn and original tags are attached.',
-  'For a specific existing order, bulk pricing, stock confirmation or a request not covered here, direct the customer to the WhatsApp support link shown in the chat.',
-  'Never claim an order was changed, a refund was issued, a payment was received, or stock was reserved unless the application confirms it.',
-].join('\n');
+  'You are Ebnimaam AI, the friendly website-wide shopping and customer-support assistant for Ebnimaam, a Nigerian online store.',
+  'Answer questions about the whole website: products, product details, sizes, availability, search, wishlist, cart, account registration and login, checkout, Paystack payment, delivery, self-pickup, order tracking, returns, refunds, Ebnimaam balance, referral rewards, team challenges, news, privacy, terms, customer support and admin-facing website guidance.',
+  'Use the supplied live website context for product names, current stock, prices, store settings and the signed-in customer own order information. Never invent catalogue items, coupon offers, delivery fees, balances, orders, policies or challenge rewards.',
+  'Keep answers concise and easy to read on a phone. Give step-by-step instructions where the user needs help navigating the website. Provide the exact page paths where useful, such as /store.html, /account.html, /rewards.html, /track and /returns.html.',
+  'Security and privacy: only discuss the orders shown for the currently authenticated customer. Never reveal another person\'s order, profile, wallet, bank details or referral activity. Do not ask for passwords, OTP codes, card details, bank PINs or full payment credentials.',
+  'The assistant is read-only. It cannot change an order, initiate or approve a refund, change a wallet balance, approve a challenge, issue a coupon or edit store settings. Direct customers to the relevant account page or human support for actions requiring authorization.',
+  'Payments use Paystack. Never ask the customer to send money to a personal account. Never claim a payment is complete until Paystack verification confirms it.',
+  'Refunds credited to the Ebnimaam balance remain there until the customer requests a bank refund; bank transfer requests require admin processing. Do not promise an instant bank payout.',
+  'Referral milestone reward requires five different referred customers to complete verified paid orders. Team challenge rewards require every member to complete all milestones and admin approval.',
+  'Camera and microphone are only used after a customer taps the photo-search or voice-search controls. Do not imply that the site continuously records or monitors the user. Calendar reminders are exported by user action and do not read a private calendar.',
+  'WhatsApp is a customer-initiated contact link only. Do not claim the site sends automated WhatsApp messages.',
+].join('\\n');
 
 function quickReply(question: string) {
   const q = question.toLowerCase();
   if (/(size|fit|measure|sizing|small|large|chest)/.test(q)) {
-    return 'Regular fit is generally true to size. For a looser look, consider sizing up, or open the Size Guide & Fit Finder on the product page to compare your height, weight and fit preference.';
+    return 'Sizing and fit vary by product. Open that product’s Size Guide & Fit Finder and compare the displayed measurements. Contact Ebnimaam if the guide is missing.';
   }
   if (/(deliver|shipping|dispatch|arrive|how long|when.*come)/.test(q)) {
-    return 'We deliver across Nigeria. Typical delivery is 1–3 working days in Jos, Abuja and Kano, and 2–5 working days to Lagos and other states. Your delivery fee is shown at checkout before you pay.';
+    return 'Your delivery fee is shown at checkout. An arrival date can only be confirmed from the store’s configured delivery information or a recorded courier update in your order tracking.';
   }
   if (/(pay|payment|card|bank|ussd|transfer)/.test(q)) {
     return 'Checkout is handled securely by Paystack. You can pay by card, bank transfer or USSD, and your order is confirmed after the payment is verified.';
   }
   if (/(return|exchange|refund|wrong size)/.test(q)) {
-    return 'Exchanges are accepted within 7 days of delivery when the item is unworn and its original tags are attached. For a specific order or refund request, please contact our team through WhatsApp.';
+    return 'Please contact us with your order reference and explain the issue. Our published Returns & Refunds policy follows applicable Nigerian consumer law and does not impose an arbitrary short deadline. Email ebnimaam.com@gmail.com or use the WhatsApp support link.';
   }
   if (/(order|bulk|wholesale|stock|existing)/.test(q)) {
     return 'For an existing order, bulk pricing or a stock confirmation, please use the WhatsApp support link in this chat so our team can check the details with you.';
@@ -58,21 +65,68 @@ export async function POST(req: Request) {
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
+    const user = await getVerifiedCustomer(req);
+    await ensureLoyaltySchema(pool).catch(() => {});
+    await ensureCouponsSchema(pool).catch(() => {});
+    await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_news(id TEXT PRIMARY KEY,title TEXT NOT NULL,content TEXT NOT NULL,image TEXT NOT NULL DEFAULT '',published BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`).catch(() => {});
+    const [catalogueResult, settingsResult, ownOrdersResult, newsResult, walletResult, couponResult, challengeResult] = await Promise.all([
+      pool.query("SELECT id,name,category,price,description,stock,sizes,tag FROM public.ebnimaam_products WHERE is_active=TRUE AND stock>0 ORDER BY updated_at DESC LIMIT 80").catch(() => ({ rows: [] as any[] })),
+      pool.query("SELECT settings FROM public.ebnimaam_store_settings WHERE id=1").catch(() => ({ rows: [] as any[] })),
+      user ? pool.query("SELECT reference,status,fulfilment_status,COALESCE(order_total_kobo,amount_kobo) AS order_total_kobo,created_at FROM public.ebnimaam_orders WHERE auth_user_id=$1 ORDER BY created_at DESC LIMIT 8",[user.id]).catch(() => ({ rows: [] as any[] })) : Promise.resolve({ rows: [] as any[] }),
+      pool.query("SELECT title,content,created_at FROM public.ebnimaam_news WHERE published=TRUE ORDER BY created_at DESC LIMIT 8").catch(() => ({ rows: [] as any[] })),
+      user ? walletAvailable(pool,user.id).catch(() => null) : Promise.resolve(null),
+      pool.query(
+        `SELECT code,discount_type,value,min_spend_kobo,valid_until
+         FROM public.ebnimaam_coupons
+         WHERE active=TRUE AND (valid_until IS NULL OR valid_until>NOW())
+           AND (max_redemptions IS NULL OR redeemed_count<max_redemptions)
+         ORDER BY created_at DESC LIMIT 20`
+      ).catch(() => ({ rows: [] as any[] })),
+      pool.query(
+        `SELECT title,description,duration_days,reward_kobo,max_team_size,milestones
+         FROM public.ebnimaam_challenges WHERE active=TRUE ORDER BY created_at DESC LIMIT 12`
+      ).catch(() => ({ rows: [] as any[] })),
+    ]);
+    const storeSettings = settingsResult.rows[0]?.settings || {};
+    const catalogueContext = (catalogueResult.rows || []).map((p:any) => ({
+      name:String(p.name),category:String(p.category),priceNaira:Number(p.price),stock:Number(p.stock),
+      sizes:Array.isArray(p.sizes)?p.sizes:[],description:String(p.description||'').slice(0,180),tag:String(p.tag||''),
+    }));
+    const orderContext = (ownOrdersResult.rows || []).map((o:any) => ({
+      reference:String(o.reference),paymentStatus:String(o.status),fulfilmentStatus:String(o.fulfilment_status),
+      totalNaira:Number(o.order_total_kobo)/100,createdAt:o.created_at,
+    }));
+    const newsContext=(newsResult.rows||[]).map((item:any)=>({title:String(item.title),content:String(item.content||'').slice(0,800),createdAt:item.created_at}));
+    const couponsContext=(couponResult.rows||[]).map((item:any)=>({code:String(item.code),discountType:String(item.discount_type),value:Number(item.value),minimumSpendNaira:Number(item.min_spend_kobo||0)/100,validUntil:item.valid_until}));
+    const challengesContext=(challengeResult.rows||[]).map((item:any)=>({title:String(item.title),description:String(item.description||'').slice(0,700),durationDays:Number(item.duration_days),rewardNaira:Number(item.reward_kobo)/100,maxTeamSize:Number(item.max_team_size),milestones:Array.isArray(item.milestones)?item.milestones:[]}));
+    const liveContext = [
+      'LIVE EBNIMAAM WEBSITE CONTEXT (use only these facts; if missing say you cannot verify):',
+      JSON.stringify({storeName:'Ebnimaam',country:'Nigeria',pickupAddress:storeSettings.pickupAddress||'',
+        pickupHours:storeSettings.pickupHours||'',supportEmail:storeSettings.supportEmail||'ebnimaam.com@gmail.com',
+        supportPhone:storeSettings.supportPhone||'08145672755',deliveryFeesByState:storeSettings.deliveryFeesByState||{},
+        deliveryRules:storeSettings.deliveryRules||'',returnsPolicy:storeSettings.returnsPolicy||'',shippingPolicy:storeSettings.shippingPolicy||'',
+        terms:storeSettings.terms||'',promotions:storeSettings.promotions||[],availableCoupons:couponsContext,activeTeamChallenges:challengesContext,products:catalogueContext,news:newsContext,
+        publishedReturnsPolicySummary:'The published policy explains Nigerian consumer rights, assessment of returns in a reasonable time, remedies for faulty, damaged, incomplete or incorrect goods, and manual refund processing. It does not set an arbitrary seven-day deadline that removes statutory rights.',
+        publishedPrivacySummary:'The published Privacy Policy explains data use, rights requests, account information, safeguards and contact details. Do not make up retention periods or data-sharing practices.',
+        publishedTermsSummary:'The published Terms cover Nigeria-only orders, Paystack, delivery fees shown at checkout, fulfilment, account requirements, customer conduct and contact information.',
+        signedInCustomer: user?{email:user.email,availableWalletKobo:walletResult,ownRecentOrders:orderContext}:null},null,2),
+      'For wallet ledger, referral status and team challenge participation details, ask the signed-in customer to open /rewards.html. The supplied wallet figure is available credit only; never infer rewards from orders.',
+    ].join('\\n');
     if (!apiKey) {
-      return NextResponse.json({ reply: quickReply(messages[messages.length - 1].text), mode: 'quick-help' });
+      return NextResponse.json({ reply: quickReply(messages[messages.length - 1].text) + ' For all other website information, open the relevant Ebnimaam page or contact support.', mode: 'quick-help' });
     }
 
     const contents = messages.map((message: any) => ({
       role: message.role,
       parts: [{ text: message.text }],
     }));
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(apiKey), {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=' + encodeURIComponent(apiKey), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: STORE_INSTRUCTIONS }] },
+        systemInstruction: { parts: [{ text: STORE_INSTRUCTIONS + '\\n\\n' + liveContext }] },
         contents,
-        generationConfig: { maxOutputTokens: 220, temperature: 0.4 },
+        generationConfig: { maxOutputTokens: 420 },
       }),
       cache: 'no-store',
       signal: AbortSignal.timeout(12000),

@@ -36,26 +36,27 @@ function money(value: number) {
 
 export default function Track() {
   const [ref, setRef] = useState('');
-  const [email, setEmail] = useState('');
-  const [token, setToken] = useState('');
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [autoTrack, setAutoTrack] = useState(false);
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [lastUpdated, setLastUpdated] = useState('');
 
   const refresh = useCallback(async (silent = false) => {
-    if (!token && (!ref.trim() || !email.trim())) return;
+    if (!ref.trim() || signedIn !== true) return;
     if (!silent) setBusy(true);
     if (!silent) setError('');
     try {
       const response = await fetch('/api/track-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(token ? { token } : { reference: ref.trim(), email: email.trim() }),
+        body: JSON.stringify({ reference: ref.trim() }),
         cache: 'no-store',
+        credentials: 'same-origin',
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'We could not find this order.');
+      if (!response.ok) throw new Error(data.error || 'We could not find this order in your account.');
       setOrder(data.order);
       setLastUpdated(new Date().toLocaleTimeString());
       setError('');
@@ -64,25 +65,36 @@ export default function Track() {
     } finally {
       if (!silent) setBusy(false);
     }
-  }, [token, ref, email]);
+  }, [ref, signedIn]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const privateToken = params.get('token') || '';
-    if (privateToken) {
-      setToken(privateToken);
-      return;
-    }
     const savedReference = params.get('reference') || '';
-    if (savedReference) setRef(savedReference);
+    if (savedReference) { setRef(savedReference); setAutoTrack(true); }
+    let active = true;
+    const checkSession = async () => {
+      try {
+        const response = await fetch('/api/auth/get-session', { credentials: 'same-origin', cache: 'no-store' });
+        const data = response.ok ? await response.json() : null;
+        if (active) setSignedIn(Boolean(data?.user?.id && data.user.emailVerified === true));
+      } catch {
+        if (active) setSignedIn(false);
+      }
+    };
+    void checkSession();
+    window.addEventListener('focus', checkSession);
+    return () => { active = false; window.removeEventListener('focus', checkSession); };
   }, []);
 
   useEffect(() => {
-    if (!token) return;
-    void refresh(false);
+    if (signedIn === true && autoTrack && ref.trim()) { setAutoTrack(false); void refresh(false); }
+  }, [signedIn, autoTrack, ref, refresh]);
+
+  useEffect(() => {
+    if (signedIn !== true || !order?.reference) return;
     const timer = window.setInterval(() => void refresh(true), 30000);
     return () => window.clearInterval(timer);
-  }, [token, refresh]);
+  }, [signedIn, order?.reference, refresh]);
 
   const currentStatus = String(order?.fulfilmentStatus || 'processing').toLowerCase();
   const isPickup = order?.fulfilmentMethod === 'pickup';
@@ -109,14 +121,21 @@ export default function Track() {
           <p style={{ color: '#697482', lineHeight: 1.7, margin: 0 }}>Follow your order from preparation to delivery or collection.</p>
         </header>
 
-        {!token && (
+        {signedIn === false && (
           <section style={{ background: '#fffefa', border: '1px solid #e8e2d8', borderRadius: 14, padding: 22, marginBottom: 18 }}>
-            <h2 style={{ color: '#102544', font: 'normal 23px Georgia,serif', marginTop: 0 }}>Find your order</h2>
+            <h2 style={{ color: '#102544', font: 'normal 23px Georgia,serif', marginTop: 0 }}>Sign in to track your order</h2>
+            <p style={{ color: '#697482', lineHeight: 1.7 }}>Order history and delivery details are only available to the verified customer account that placed the order.</p>
+            <a href={'/account.html?next=track' + (ref ? '&reference=' + encodeURIComponent(ref) : '')} style={{ display: 'block', textAlign: 'center', textDecoration: 'none', padding: 15, marginTop: 18, background: '#102544', color: '#fff', borderRadius: 8, fontWeight: 700 }}>Sign in to your Ebnimaam account</a>
+          </section>
+        )}
+        {signedIn === null && <p style={{ color: '#697482', textAlign: 'center' }}>Checking your secure account session…</p>}
+        {signedIn === true && (
+          <section style={{ background: '#fffefa', border: '1px solid #e8e2d8', borderRadius: 14, padding: 22, marginBottom: 18 }}>
+            <h2 style={{ color: '#102544', font: 'normal 23px Georgia,serif', marginTop: 0 }}>Find an order in your account</h2>
             <form onSubmit={(event) => { event.preventDefault(); void refresh(false); }}>
               <label style={{ display: 'block', fontSize: 12, margin: '12px 0 6px' }}>Order reference</label>
               <input required value={ref} onChange={(event) => setRef(event.target.value)} placeholder="EBN-…" style={{ width: '100%', padding: 14, border: '1px solid #ddd7cd', borderRadius: 8, boxSizing: 'border-box' }} />
-              <label style={{ display: 'block', fontSize: 12, margin: '14px 0 6px' }}>Email used at checkout</label>
-              <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" style={{ width: '100%', padding: 14, border: '1px solid #ddd7cd', borderRadius: 8, boxSizing: 'border-box' }} />
+              <p style={{ color: '#697482', fontSize: 12, lineHeight: 1.6 }}>Only orders belonging to your signed-in account can be displayed. An email address or order reference alone is not enough.</p>
               <button disabled={busy} style={{ width: '100%', padding: 15, marginTop: 18, background: '#102544', color: '#fff', border: 0, borderRadius: 8, fontWeight: 700 }}>{busy ? 'Checking…' : 'Track my order'}</button>
             </form>
           </section>

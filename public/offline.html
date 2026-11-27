@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#102544">
+<title>You're offline | Ebnimaam</title>
+<style>
+:root{color-scheme:light;--navy:#102544;--gold:#c99550;--cream:#faf8f2;--ink:#202a35;--muted:#68727e}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:var(--cream);color:var(--ink);font:16px/1.6 Arial,sans-serif}
+main{width:min(100%,480px);padding:34px 28px;text-align:center;background:white;border:1px solid #e9e5dc;border-radius:20px;box-shadow:0 12px 38px #10254412}
+img{width:76px;height:76px;object-fit:contain}h1{margin:16px 0 8px;color:var(--navy);font:32px Georgia,serif}
+p{color:var(--muted)}a,button{display:inline-block;margin:8px;padding:12px 18px;border:0;border-radius:8px;background:var(--navy);color:white;text-decoration:none;font:inherit;cursor:pointer}
+a.secondary{background:#f3eee5;color:var(--navy)}
+</style>
+</head>
+<body>
+<main>
+<img src="/assets/ebnimaam-app-icon-192.svg" alt="Ebnimaam">
+<h1>You're offline</h1>
+<p>Your connection is unavailable. The saved public shop page may still open, but live prices, stock, account details, orders and checkout need an internet connection.</p>
+<a href="/store.html">Open saved shop</a>
+<button type="button" onclick="location.reload()">Try again</button>
+</main>
+</body>
+</html>

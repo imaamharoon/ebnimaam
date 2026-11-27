@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { isCurrentCustomerSession } from '../../../../lib/customer-sessions';
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const authBase = (process.env.NEON_AUTH_BASE_URL || 'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neon.tech/ebnimaam/auth').replace(/\/$/, '');
@@ -11,6 +12,7 @@ async function customer(req: Request) {
   const data = await response.json();
   const user = data?.user;
   if (!user?.id || !user?.email || user.emailVerified !== true) return null;
+  if (!(await isCurrentCustomerSession(req, String(user.id)))) return null;
   return user as { id: string; email: string; name?: string; emailVerified?: boolean };
 }
 async function init() {
@@ -26,8 +28,9 @@ export async function GET(req: Request) {
     await init();
     const result = await pool.query('SELECT full_name,phone,addresses,preferences,updated_at FROM public.ebnimaam_customer_profiles WHERE user_id=$1', [user.id]);
     const profile = result.rows[0] || { full_name: user.name || '', phone: '', addresses: [], preferences: {} };
-    const orders = await pool.query(
-      `SELECT o.reference,o.amount_kobo,o.currency,o.status,o.fulfilment_status,o.items,o.created_at,o.paid_at,
+    await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS order_total_kobo BIGINT');
+const orders = await pool.query(
+      `SELECT o.reference,COALESCE(o.order_total_kobo,o.amount_kobo) AS amount_kobo,o.amount_kobo AS paystack_amount_kobo,o.currency,o.status,o.fulfilment_status,o.items,o.created_at,o.paid_at,
               COALESCE((SELECT json_agg(json_build_object('status',h.status,'note',h.note,'created_at',h.created_at) ORDER BY h.created_at ASC)
                 FROM public.ebnimaam_order_status_history h WHERE h.reference=o.reference),'[]'::json) AS history
        FROM public.ebnimaam_orders o

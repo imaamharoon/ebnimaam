@@ -39,10 +39,11 @@ export async function GET(req: Request) {
   if (!isAdminRequest(req, secret)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     await ensureOrderEmailEventsTable();
-    const [result, customerResult, activity] = await Promise.all([
+    await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS order_total_kobo BIGINT');
+      const [result, customerResult, activity] = await Promise.all([
       pool.query(
         `SELECT o.reference,o.auth_user_id,o.customer_email,o.customer_name,o.customer_phone,o.address,
-                o.amount_kobo,o.currency,o.status,o.fulfilment_status,o.items,o.created_at,o.paid_at,
+                COALESCE(o.order_total_kobo,o.amount_kobo) AS amount_kobo,o.amount_kobo AS paystack_amount_kobo,o.currency,o.status,o.fulfilment_status,o.items,o.created_at,o.paid_at,
                 o.payment_provider,o.provider_transaction_id,o.updated_at,
                 COALESCE(o.address->>'fulfilment_method','delivery') AS fulfilment_method,
                 COALESCE((SELECT json_agg(json_build_object('status',h.status,'note',h.note,'created_at',h.created_at)
@@ -55,7 +56,7 @@ export async function GET(req: Request) {
         `SELECT LOWER(customer_email) AS email,MAX(customer_name) AS name,MAX(customer_phone) AS phone,
                 COUNT(*)::int AS order_count,
                 COUNT(*) FILTER (WHERE status='paid')::int AS paid_order_count,
-                COALESCE(SUM(amount_kobo) FILTER (WHERE status='paid'),0)::bigint AS paid_total_kobo,
+                COALESCE(SUM(COALESCE(order_total_kobo,amount_kobo)) FILTER (WHERE status='paid'),0)::bigint AS paid_total_kobo,
                 MAX(created_at) AS last_order_at
          FROM public.ebnimaam_orders WHERE customer_email IS NOT NULL AND customer_email<>''
          GROUP BY LOWER(customer_email) ORDER BY last_order_at DESC LIMIT 500`,
@@ -91,15 +92,28 @@ export async function PATCH(req: Request) {
       }
     }
     try {
-      const updated = await pool.query(
-        "UPDATE public.ebnimaam_orders SET address=COALESCE(address,'{}'::jsonb) || $1::jsonb,updated_at=NOW() WHERE reference=$2 RETURNING fulfilment_status",
-        [JSON.stringify({ tracking_carrier: carrier, tracking_code: trackingCode, tracking_url: trackingUrl || '' }), reference],
-      );
-      if (!updated.rowCount) return NextResponse.json({ error: 'Order not found.' }, { status: 404 });
-      await pool.query(
-        'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
-        [reference, 'tracking_updated', 'Courier tracking information updated.', 'admin'],
-      );
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const updated = await client.query(
+          "UPDATE public.ebnimaam_orders SET address=COALESCE(address,'{}'::jsonb) || $1::jsonb,updated_at=NOW() WHERE reference=$2 RETURNING fulfilment_status",
+          [JSON.stringify({ tracking_carrier: carrier, tracking_code: trackingCode, tracking_url: trackingUrl || '' }), reference],
+        );
+        if (!updated.rowCount) {
+          await client.query('ROLLBACK');
+          return NextResponse.json({ error: 'Order not found.' }, { status: 404 });
+        }
+        await client.query(
+          'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
+          [reference, 'tracking_updated', 'Courier tracking information updated.', 'admin'],
+        );
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
       await recordAdminActivity('order.tracking.updated', 'order', reference, { carrier: carrier || null, hasTrackingUrl: Boolean(trackingUrl), hasTrackingCode: Boolean(trackingCode) });
       return NextResponse.json({ ok: true, trackingCarrier: carrier, trackingCode, trackingUrl });
     } catch {
