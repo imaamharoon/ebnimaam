@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { isCurrentCustomerSession } from '../../../../lib/customer-sessions';
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const authBase = (process.env.NEON_AUTH_BASE_URL || 'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neon.tech/ebnimaam/auth').replace(/\/$/, '');
@@ -11,6 +12,7 @@ async function customer(req: Request) {
   const data = await response.json();
   const user = data?.user;
   if (!user?.id || !user?.email || user.emailVerified !== true) return null;
+  if (!(await isCurrentCustomerSession(req, String(user.id)))) return null;
   return user as { id: string; email: string; name?: string; emailVerified?: boolean };
 }
 async function init() {
