@@ -150,7 +150,7 @@ export async function POST(req: Request) {
     const settingsResult = await pool.query('SELECT settings FROM public.ebnimaam_store_settings WHERE id=1');
     const storeSettings = settingsResult.rows[0]?.settings || {};
     const configuredFees = storeSettings.deliveryFeesByState || {};
-    const pickupAddress = String(storeSettings.pickupAddress || 'Terminus Main Market, near the bus stop').trim();
+    const pickupAddress = String(storeSettings.pickupAddress || '').trim();
     if (fulfilmentMethod === 'pickup' && !pickupAddress) {
       return NextResponse.json({ error: 'Self-pickup is not available yet. Please contact Ebnimaam or choose home delivery.' }, { status: 409 });
     }
