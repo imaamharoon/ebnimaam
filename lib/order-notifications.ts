@@ -136,10 +136,10 @@ export async function sendOrderStatusEmail(reference: string, statusInput: strin
       if (provider === 'resend') {
         response = await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+resendKey,'Content-Type':'application/json'},body:JSON.stringify({from:sender,to:[recipient],subject:copy.subject+' · '+reference,html:body,text:textBody}),cache:'no-store',signal:AbortSignal.timeout(10000)});
       } else {
-        const match = sender.match(/^\\s*(.*?)\\s*<([^<>]+)>\\s*$/);
+        const match = sender.match(/^\s*(.*?)\s*<([^<>]+)>\s*$/);
         const senderEmail = match ? match[2].trim() : sender.trim();
         const senderName = match ? match[1].replace(/^['"]|['"]$/g,'').trim() : 'Ebnimaam';
-        if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(senderEmail)) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(senderEmail)) {
           const reason = 'EMAIL_FROM must be a valid sender email address or display-name address.';
           await pool.query("UPDATE public.ebnimaam_order_email_events SET delivery_status='failed',last_error=$1,updated_at=NOW() WHERE event_key=$2",[reason,eventKey]);
           return {deliveryStatus:'failed',reason};
