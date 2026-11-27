@@ -94,5 +94,5 @@ Transactional order email uses the Resend HTTP API. Configure both values in the
 
 Keep AUTH_SECRET configured; it signs private tracking links. Do not put these secrets in GitHub, source code, browser code or chat. Email delivery remains marked not_configured until both provider variables and the tracking signing secret are present. Verify the sender domain and send a controlled test to the store owner's inbox before enabling customer notification in production. The existing account verification/OTP email configuration is separate from these transactional order messages.
 
-The internal tracking page shows database status history and checks for updates every 30 seconds while the private link is open. It is not a courier GPS feed. For map-based live location, a delivery partner API or rider location integration is required; a secure courier tracking URL can be saved per order in Admin.
+The internal tracking page shows database status history and checks for updates every 30 seconds while the private link is open. Customers can also use the existing order-reference plus checkout-email lookup as a fallback. It is not a courier GPS feed. For map-based live location, a delivery partner API or rider location integration is required; a secure courier tracking URL can be saved per order in Admin.
 
