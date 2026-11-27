@@ -200,7 +200,8 @@
     var account = document.getElementById("accountCard");
     if (!account) return;
     var observer = new MutationObserver(function () {
-      if (!account.classList.contains("hide") && !loaded) init();
+      if (account.classList.contains("hide")) { loaded = false; if (root) { root.remove(); root = null; } return; }
+      if (!loaded) init();
     });
     observer.observe(account, { attributes: true, attributeFilter: ["class"] });
     if (!account.classList.contains("hide")) init();

@@ -109,9 +109,19 @@ export async function ensureLoyaltyTables() {
     CREATE INDEX IF NOT EXISTS ebnimaam_coupon_redemptions_code_idx ON public.ebnimaam_coupon_redemptions(code,status);
     CREATE INDEX IF NOT EXISTS ebnimaam_coupon_redemptions_user_idx ON public.ebnimaam_coupon_redemptions(code,user_id,status);
 
-    ALTER TABLE public.ebnimaam_wallet_ledger DROP CONSTRAINT IF EXISTS ebnimaam_wallet_ledger_entry_type_check;
-    ALTER TABLE public.ebnimaam_wallet_ledger ADD CONSTRAINT ebnimaam_wallet_ledger_entry_type_check
-      CHECK (entry_type IN ('referral_reward','challenge_reward','refund_credit','bank_refund_request','wallet_spend'));
+    DO $
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid='public.ebnimaam_wallet_ledger'::regclass
+          AND conname='ebnimaam_wallet_ledger_entry_type_check'
+          AND pg_get_constraintdef(oid) LIKE '%wallet_spend%'
+      ) THEN
+        ALTER TABLE public.ebnimaam_wallet_ledger DROP CONSTRAINT IF EXISTS ebnimaam_wallet_ledger_entry_type_check;
+        ALTER TABLE public.ebnimaam_wallet_ledger ADD CONSTRAINT ebnimaam_wallet_ledger_entry_type_check
+          CHECK (entry_type IN ('referral_reward','challenge_reward','refund_credit','bank_refund_request','wallet_spend'));
+      END IF;
+    END $;
 
     CREATE TABLE IF NOT EXISTS public.ebnimaam_challenge_teams (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

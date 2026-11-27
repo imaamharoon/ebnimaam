@@ -28,5 +28,6 @@ Storage.prototype.setItem=function(key,value){
  if(key==="ebnimaam_wishlist")schedule();
  return result;
 };
+window.addEventListener("message",function(event){if(event.origin===location.origin&&event.data&&event.data.type==="ebnimaam-account-authenticated"){ready=false;init()}});
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
 })();

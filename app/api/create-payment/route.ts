@@ -217,6 +217,7 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: 'This coupon is no longer active.' }, { status: 409 });
         }
         const currentCoupon = lockedCoupon.rows[0];
+        if (subtotal * 100 < Number(currentCoupon.minimum_subtotal_kobo || 0)) { await couponClient.query('ROLLBACK'); return NextResponse.json({ error: 'Your basket no longer meets the minimum order for this coupon.' }, { status: 409 }); }
         if (String(currentCoupon.discount_type) !== String(coupon.discount_type) || Number(currentCoupon.discount_value) !== Number(coupon.discount_value)) {
           await couponClient.query('ROLLBACK');
           return NextResponse.json({ error: 'This coupon changed while checkout was open. Please refresh and try again.' }, { status: 409 });

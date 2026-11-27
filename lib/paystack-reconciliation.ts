@@ -85,7 +85,7 @@ export async function verifyAndReconcilePaystack(
          VALUES($1,$2,$3,$4,$5::jsonb,NOW()) ON CONFLICT(provider_event_id) DO NOTHING`,
         [reference,eventId,transactionId,eventName,JSON.stringify(safeEvent)],
       );
-      if (terminalFailureStatuses.has(transactionStatus)) {
+      if (terminalFailureStatuses.has(transactionStatus) && order.status !== 'paid') {
         await client.query("UPDATE public.ebnimaam_wallet_ledger SET status='rejected',updated_at=NOW() WHERE source_key=$1 AND status='pending'", ['wallet-checkout:' + reference]);
         await client.query("UPDATE public.ebnimaam_coupon_redemptions SET status='released',updated_at=NOW() WHERE reference=$1 AND status='pending'", [reference]);
       }

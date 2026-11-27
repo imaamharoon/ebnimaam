@@ -13,12 +13,13 @@ export async function GET(req: Request) {
   if (!isAdminRequest(req, secret)) return unauth();
   try {
     await ensureLoyaltyTables();
-    const [settings, requests, submissions, referralStats, coupons] = await Promise.all([
+    const [settings, requests, submissions, referralStats, coupons, walletReservations] = await Promise.all([
       loyaltyPool.query('SELECT * FROM public.ebnimaam_loyalty_settings WHERE id=1'),
       loyaltyPool.query("SELECT id,user_id,amount_kobo,status,description,private_details,created_at FROM public.ebnimaam_wallet_ledger WHERE entry_type='bank_refund_request' AND status='pending' ORDER BY created_at ASC LIMIT 100"),
       loyaltyPool.query("SELECT s.id,s.team_id,s.day_number,s.submitted_by,s.evidence,s.status,s.admin_note,s.created_at,t.invite_code,t.created_at AS team_started_at,(SELECT COUNT(*)::int FROM public.ebnimaam_challenge_members m WHERE m.team_id=t.id) AS member_count FROM public.ebnimaam_challenge_submissions s JOIN public.ebnimaam_challenge_teams t ON t.id=s.team_id WHERE s.status='pending' ORDER BY s.created_at ASC LIMIT 100"),
       loyaltyPool.query("SELECT COUNT(*) FILTER (WHERE status='qualified')::int AS qualified,COUNT(*) FILTER (WHERE status='pending')::int AS pending,COUNT(DISTINCT referrer_user_id)::int AS referrers FROM public.ebnimaam_referrals"),
-      loyaltyPool.query("SELECT c.code,c.discount_type,c.discount_value,c.minimum_subtotal_kobo,c.max_redemptions,c.per_user_limit,c.starts_at,c.ends_at,c.is_active,COUNT(r.id) FILTER (WHERE r.status='paid')::int AS paid_redemptions,COUNT(r.id) FILTER (WHERE r.status='pending')::int AS pending_redemptions FROM public.ebnimaam_coupons c LEFT JOIN public.ebnimaam_coupon_redemptions r ON r.code=c.code GROUP BY c.code ORDER BY c.created_at DESC LIMIT 100")
+      loyaltyPool.query("SELECT c.code,c.discount_type,c.discount_value,c.minimum_subtotal_kobo,c.max_redemptions,c.per_user_limit,c.starts_at,c.ends_at,c.is_active,COUNT(r.id) FILTER (WHERE r.status='paid')::int AS paid_redemptions,COUNT(r.id) FILTER (WHERE r.status='pending')::int AS pending_redemptions FROM public.ebnimaam_coupons c LEFT JOIN public.ebnimaam_coupon_redemptions r ON r.code=c.code GROUP BY c.code ORDER BY c.created_at DESC LIMIT 100"),
+      loyaltyPool.query("SELECT l.id,l.user_id,l.amount_kobo,l.created_at,o.reference,o.status AS order_status FROM public.ebnimaam_wallet_ledger l LEFT JOIN public.ebnimaam_orders o ON l.source_key='wallet-checkout:'||o.reference WHERE l.entry_type='wallet_spend' AND l.status='pending' ORDER BY l.created_at ASC LIMIT 100")
     ]);
     const bankRequests = requests.rows.map((row: any) => ({
       id: row.id, user_id: row.user_id, amount_kobo: Number(row.amount_kobo),
@@ -30,7 +31,8 @@ export async function GET(req: Request) {
       bank_refund_requests: bankRequests,
       challenge_submissions: submissions.rows,
       referrals: referralStats.rows[0] || { qualified: 0, pending: 0, referrers: 0 },
-      coupons: coupons.rows
+      coupons: coupons.rows,
+      wallet_reservations: walletReservations.rows
     }, { headers: { 'cache-control': 'no-store' } });
   } catch {
     return responseError('Ebnimaam loyalty admin data is unavailable.', 503);
@@ -69,6 +71,17 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ ok: true, message: 'Rewards and low-stock settings saved. Existing balances were not changed.' });
     }
 
+
+    if (action === 'release_wallet_reservation') {
+      const id = String(body.id || '').trim();
+      if (!id) return responseError('Wallet reservation ID is required.');
+      const result = await loyaltyPool.query(
+        "UPDATE public.ebnimaam_wallet_ledger l SET status='rejected',updated_at=NOW() FROM public.ebnimaam_orders o WHERE l.id=$1 AND l.entry_type='wallet_spend' AND l.status='pending' AND l.source_key='wallet-checkout:'||o.reference AND o.status IN ('failed','abandoned','reversed','initialization_failed') RETURNING l.id",
+        [id]
+      );
+      if (!result.rowCount) return responseError('This reservation is not linked to a failed or cancelled payment. Verify the payment status before releasing it.',409);
+      return NextResponse.json({ok:true,message:'Wallet reservation released back to the customer.'});
+    }
     if (action === 'review_bank_refund') {
       const id = String(body.id || '').trim();
       const decision = String(body.decision || '');

@@ -111,6 +111,10 @@ export async function POST(req: Request) {
       if (!team.rowCount) return fail('Join or create a team before submitting a milestone.');
       const started = new Date(team.rows[0].created_at).getTime();
       if (Date.now() < started + (day - 1) * 24 * 60 * 60 * 1000) return fail('That milestone opens after the previous challenge day has passed.');
+      if (day > 1) {
+        const priorDay = await loyaltyPool.query("SELECT status FROM public.ebnimaam_challenge_submissions WHERE team_id=$1 AND day_number=$2", [team.rows[0].id, day - 1]);
+        if (!priorDay.rowCount || String(priorDay.rows[0].status) !== 'approved') return fail('Your previous challenge day must be approved before you can submit this milestone.');
+      }
       const submitted = await loyaltyPool.query("INSERT INTO public.ebnimaam_challenge_submissions(team_id,day_number,submitted_by,evidence) VALUES($1,$2,$3,$4) ON CONFLICT(team_id,day_number) DO UPDATE SET submitted_by=EXCLUDED.submitted_by,evidence=EXCLUDED.evidence,status='pending',admin_note=NULL,reviewed_at=NULL,created_at=NOW() WHERE public.ebnimaam_challenge_submissions.status='rejected' RETURNING id", [team.rows[0].id, day, user.id, evidence]);
       if (!submitted.rowCount) return fail('This milestone has already been submitted by your team.');
       return NextResponse.json({ ok: true, message: 'Milestone submitted for owner review. Rewards are not released until all seven days are approved.' });
@@ -121,7 +125,7 @@ export async function POST(req: Request) {
       const accountName = String(body?.accountName || '').trim().slice(0, 100);
       const accountNumber = String(body?.accountNumber || '').replace(/[^0-9]/g, '').slice(0, 10);
       const bankName = String(body?.bankName || '').trim().slice(0, 100);
-      if (!Number.isSafeInteger(amountNaira) || amountNaira < 100 || accountNumber.length !== 10 || accountName.length < 3 || bankName.length < 2) return fail('Enter an amount of at least ₦100 and valid bank account details.');
+      if (!Number.isSafeInteger(amountNaira) || amountNaira < 100 || amountNaira > 100000000 || !Number.isSafeInteger(amountNaira * 100) || accountNumber.length !== 10 || accountName.length < 3 || bankName.length < 2) return fail('Enter an amount of at least ₦100 and valid bank account details.');
       const encrypted = encryptPrivateDetails({ accountName, accountNumber, bankName });
       const client = await loyaltyPool.connect();
       try {
