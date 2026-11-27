@@ -168,8 +168,8 @@ async function openCheckout(){
     if(address.country)form.elements.country.value=address.country;
    }
   }catch{}
-  closeCart();
-  if(!history.state?.ebnimaamOverlay)history.pushState({ebnimaamOverlay:'checkout'},'',location.href);
+  closeCart(true);
+  history.pushState({ebnimaamOverlay:'checkout'},'',location.href);
   document.getElementById('checkoutOverlay').classList.add('open');
   form.elements.state.addEventListener('change',updateCheckoutSummary,{once:false});
   updateFulfilmentMethodUi();
