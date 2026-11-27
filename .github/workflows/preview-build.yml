@@ -25,6 +25,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Audit dependencies for high-severity vulnerabilities
         run: npm audit --audit-level=high
+      - name: Verify browser security headers preserve the embedded account flow
+        run: npm run security:check
       - name: Type-check
         run: npm run typecheck
       - name: Build Next.js production bundle
