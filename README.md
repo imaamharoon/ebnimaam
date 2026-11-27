@@ -114,3 +114,13 @@ Ebnimaam AI can answer questions across the live catalogue, store settings, publ
 Refund credits are added to the Ebnimaam wallet by an administrator after approving the return. Customers may request a bank refund from their wallet page; the request is reserved for admin review. A bank transfer is marked paid only after the administrator has completed the transfer manually. No automatic bank payout or Paystack refund API is claimed.
 
 The admin dashboard refreshes order and inventory data periodically and shows active products that are low on stock or out of stock. WhatsApp remains a customer-initiated contact link; no automated WhatsApp or SMS messages are sent.
+
+
+## Account security and private order access
+
+- Customer accounts use one active Ebnimaam app session per account. A sign-in from a second device replaces the previous app session, and a browser/app installation cannot keep two customer accounts active at once.
+- New devices are recorded and trigger a security email to the verified account address when the Resend sender configuration is present. Configure `RESEND_API_KEY` and `EMAIL_FROM` in Vercel with a verified sender domain before relying on email alerts.
+- Checkout, customer profile reads/updates, payment-return verification, saved reviews and order tracking check the active device-bound customer session. An order reference or email address alone cannot reveal private order details.
+- The storefront includes a refresh control, mobile history-aware account/cart/checkout overlays and the owner-provided WhatsApp Channel follow link. Additional social handles are managed in Admin → Store settings.
+
+**Passkeys / fingerprint login:** The current Neon Managed Auth client does not expose passkey/WebAuthn or MFA plugins. These are not enabled in this release. A supported implementation requires a separately reviewed move to self-managed Better Auth (or another identity provider) with an existing-user and recovery migration plan; do not claim biometric login is active before that work is complete.
