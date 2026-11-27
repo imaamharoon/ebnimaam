@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { isAdminRequest } from '../../../lib/admin-auth';
+import { recordAdminActivity } from '../../../lib/admin-audit';
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const defaultFees: Record<string, number> = {
@@ -86,6 +87,7 @@ export async function PUT(req: Request) {
       socialLinks,
     };
     await pool.query('UPDATE public.ebnimaam_store_settings SET settings=$1::jsonb,updated_at=NOW() WHERE id=1',[JSON.stringify(allowed)]);
+    await recordAdminActivity('store_settings.updated', 'store_settings', '1', { updatedKeys: Object.keys(body).slice(0, 20).join(',') });
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: 'Settings save failed.' }, { status: 500 });

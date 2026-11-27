@@ -8,7 +8,14 @@ export async function POST(req: Request) {
   const secret = process.env.PAYSTACK_SECRET_KEY;
   if (!secret) return NextResponse.json({ error: 'Webhook verification is not configured.' }, { status: 503 });
 
+  const declaredSize = Number(req.headers.get('content-length') || 0);
+  if (Number.isFinite(declaredSize) && declaredSize > 256_000) {
+    return NextResponse.json({ error: 'Webhook payload is too large.' }, { status: 413 });
+  }
   const rawBody = await req.text();
+  if (Buffer.byteLength(rawBody, 'utf8') > 256_000) {
+    return NextResponse.json({ error: 'Webhook payload is too large.' }, { status: 413 });
+  }
   const signature = req.headers.get('x-paystack-signature') || '';
   const expected = createHmac('sha512', secret).update(rawBody).digest('hex');
   const supplied = Buffer.from(signature, 'utf8');

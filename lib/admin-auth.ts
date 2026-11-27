@@ -12,7 +12,9 @@ export function isAdminRequest(req: Request, secret = process.env.ADMIN_PASSWORD
   if (!secret) return false;
   const match = (req.headers.get('cookie') || '').match(/(?:^|;\s*)ebn_admin=([^;]+)/);
   if (!match) return false;
-  const [expiresPart, suppliedPart] = decodeURIComponent(match[1]).split('.');
+  let decoded = '';
+  try { decoded = decodeURIComponent(match[1]); } catch { return false; }
+  const [expiresPart, suppliedPart] = decoded.split('.');
   const expiresAt = Number(expiresPart);
   const now = Math.floor(Date.now() / 1000);
   if (!Number.isSafeInteger(expiresAt) || expiresAt <= now || expiresAt > now + SESSION_SECONDS) return false;
