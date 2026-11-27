@@ -47,3 +47,17 @@ This release groups security hardening, customer experience improvements, and an
 7. Test Paystack success, failed payment, webhook retries, duplicate callbacks, concurrent stock, low stock, cancellations, and refunds using test credentials before production use.
 8. Test Android and slow-network journeys: account creation, browsing, search, cart persistence, checkout, payment return, order tracking, and customer support.
 9. Promote only after preview build and release checks pass. Keep the previous production deployment available for rollback.
+
+
+## Customer-session, privacy, and app-navigation hardening in the coordinated release
+
+- A verified customer account has one active Ebnimaam application session at a time. The app stores only HMAC digests of its random session and device tokens; the raw tokens are held in HttpOnly cookies. A successful sign-in from another browser/device replaces the active application session, so the prior device can no longer use customer-profile, order, review, wallet, wishlist, checkout, or payment-verification APIs.
+- The first sign-in and each newly recognised device are recorded in `ebnimaam_customer_security_events`. A security email is attempted to the already verified account email. Delivery requires `RESEND_API_KEY` and `EMAIL_FROM`; these two settings were not present in the inspected Vercel environment, so email delivery must not be described as active until the owner configures a verified sender domain. Events record `not_configured` when email is unavailable.
+- Order tracking requires a verified signed-in account and checks the order's account ID (or the same verified email for legacy orders that predate account-ID linking). A reference, checkout email, or old signed tracking token no longer grants access by itself. Payment-return verification also checks account ownership before reconciling the payment.
+- The dedicated tracking page and order status email links now direct customers through account sign-in. Checkout and profile APIs independently enforce the active application session.
+- The storefront includes an in-app refresh control, refreshes its service-worker shell version, and adds browser-history entries for account/cart/checkout overlays so the Android/browser back gesture dismisses an overlay before navigating away. The existing PWA navigation uses network-first refresh with an offline shell fallback; API responses are not put into the service-worker cache.
+- Storefront settings now include the official Ebnimaam WhatsApp Channel URL supplied by the owner, alongside the existing social-profile URLs. The public storefront displays the channel follow link and any other verified social URLs saved in Admin.
+
+## Authentication provider limitation — passkeys and biometrics
+
+The current project uses Neon Managed Auth. Its managed client/UI does not expose the Passkey/WebAuthn plugin or MFA/Two-Factor plugin. Therefore fingerprint/face unlock through passkeys and provider-managed MFA are **not enabled by this code release**. Do not show a working passkey control or claim biometric login is available. Supporting passkeys requires a separately designed migration to self-managed Better Auth (or another supported identity provider), including a reviewed user/credential/session migration and recovery plan. Do not switch providers or alter existing user identities in this coordinated release without that migration plan.
