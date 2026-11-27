@@ -1,6 +1,8 @@
 name: Preview build validation
 
 on:
+  push:
+    branches: [fix/paystack-size-stock-guards-20261127]
   pull_request:
     branches: [main]
   workflow_dispatch:
