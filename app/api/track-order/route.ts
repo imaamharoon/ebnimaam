@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { checkRateLimit } from '../../../lib/rate-limit';
-import { verifyOrderTrackingToken } from '../../../lib/order-notifications';
+import { getVerifiedCustomer } from '../../../lib/loyalty';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 
 export async function POST(req: Request) {
@@ -18,24 +19,32 @@ export async function POST(req: Request) {
   }
 
   try {
-    const body = await req.json();
-    const token = String(body?.token || '').trim();
-    const tokenReference = token ? verifyOrderTrackingToken(token) : null;
-    if (token && !tokenReference) {
-      return NextResponse.json({ error: 'This private tracking link is invalid or has expired. Enter your order reference and email to continue.' }, { status: 404 });
+    const user = await getVerifiedCustomer(req);
+    if (!user) {
+      return NextResponse.json({ error: 'Please create or sign in to your verified Ebnimaam account to track your orders.' }, { status: 401, headers: { 'cache-control': 'no-store' } });
     }
-    const reference = String(tokenReference || body?.reference || '').trim();
-    const email = String(body?.email || '').trim().toLowerCase();
-    if (!reference || reference.length > 160 || (!tokenReference && !email)) {
-      return NextResponse.json({ error: 'Order reference and email are required.' }, { status: 400 });
+    const body = await req.json();
+    const reference = String(body?.reference || '').trim();
+    if (!reference || reference.length > 160) {
+      return NextResponse.json({ error: 'Enter your order reference to continue.' }, { status: 400 });
     }
 
     await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS order_total_kobo BIGINT');
-const result = await pool.query(
-      "SELECT o.reference,o.customer_email,COALESCE(o.order_total_kobo,o.amount_kobo) AS amount_kobo,o.currency,o.status,o.fulfilment_status,o.created_at,o.paid_at,o.address,s.settings,COALESCE((SELECT json_agg(json_build_object('status',h.status,'note',h.note,'created_at',h.created_at) ORDER BY h.created_at ASC) FROM public.ebnimaam_order_status_history h WHERE h.reference=o.reference),'[]'::json) AS history FROM public.ebnimaam_orders o LEFT JOIN public.ebnimaam_store_settings s ON s.id=1 WHERE o.reference=$1 AND ($2::text IS NULL OR LOWER(o.customer_email)=LOWER($2))",
-      [reference, tokenReference ? null : email],
+    const result = await pool.query(
+      `SELECT o.reference,o.customer_email,COALESCE(o.order_total_kobo,o.amount_kobo) AS amount_kobo,
+              o.currency,o.status,o.fulfilment_status,o.created_at,o.paid_at,o.address,s.settings,
+              COALESCE((SELECT json_agg(json_build_object('status',h.status,'note',h.note,'created_at',h.created_at)
+                ORDER BY h.created_at ASC) FROM public.ebnimaam_order_status_history h
+                WHERE h.reference=o.reference),'[]'::json) AS history
+       FROM public.ebnimaam_orders o
+       LEFT JOIN public.ebnimaam_store_settings s ON s.id=1
+       WHERE o.reference=$1
+         AND (o.auth_user_id=$2 OR (o.auth_user_id IS NULL AND LOWER(o.customer_email)=LOWER($3)))`,
+      [reference, user.id, user.email],
     );
-    if (!result.rowCount) return NextResponse.json({ error: 'Order not found.' }, { status: 404 });
+    if (!result.rowCount) {
+      return NextResponse.json({ error: 'We could not find that order in your signed-in account.' }, { status: 404, headers: { 'cache-control': 'no-store' } });
+    }
 
     const row = result.rows[0];
     const address = row.address && typeof row.address === 'object' ? row.address : {};
@@ -65,8 +74,8 @@ const result = await pool.query(
         paidAt: row.paid_at,
         history: row.history,
       },
-    }, { headers: { 'cache-control': 'no-store' } });
+    }, { headers: { 'cache-control': 'private, no-store, max-age=0' } });
   } catch {
-    return NextResponse.json({ error: 'Unable to check order at this time.' }, { status: 500 });
+    return NextResponse.json({ error: 'Unable to check order at this time.' }, { status: 500, headers: { 'cache-control': 'no-store' } });
   }
 }
