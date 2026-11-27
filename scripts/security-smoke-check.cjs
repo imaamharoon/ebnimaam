@@ -27,7 +27,7 @@ assert.ok(config.includes("key: 'Strict-Transport-Security'"));
 assert.ok(config.includes("key: 'Referrer-Policy'"));
 assert.ok(config.includes("camera=(self), microphone=(self), geolocation=()"));
 assert.ok(paymentInitialization.includes("const pickupAddress = String(storeSettings.pickupAddress || '').trim();"));
-assert.ok(paymentInitialization.includes("fulfilmentMethod === 'pickup' && !pickupAddress"));
+assert.ok(paymentInitialization.includes("fulfilmentMethod === 'pickup' && (storeSettings.pickupAddressConfirmed !== true || !pickupAddress)"));
 assert.ok(paymentInitialization.includes("const definitiveFailure ="));
 assert.ok(paymentInitialization.includes("verificationRequired: !definitiveFailure"));
 assert.ok(!aiSupport.includes('1–3 working days'));
