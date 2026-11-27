@@ -162,9 +162,43 @@
   const escapeHtml=value=>String(value==null?"":value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
   const standardSizes=["S","M","L","XL","XXL"];
   const defaultChart=[{size:"S",chest:92,length:66,shoulder:41},{size:"M",chest:98,length:68,shoulder:43},{size:"L",chest:104,length:70,shoulder:45},{size:"XL",chest:110,length:72,shoulder:47},{size:"XXL",chest:116,length:74,shoulder:49}];
-  let catalog=[],product=null,cart=[],selectedSize="",selectedColor=null,fitPreference="regular",recommendedSize="",deliveryFees={},lastFocused=null,checkoutWalletAvailableKobo=0;
+  let catalog=[],product=null,cart=[],selectedSize="",selectedColor=null,fitPreference="regular",recommendedSize="",deliveryFees={},lastFocused=null,checkoutWalletAvailableKobo=0,customerCartSyncActive=false,customerCartSyncTimer=null;
   function loadCart(){try{const raw=JSON.parse(localStorage.getItem("ebnimaam_cart")||"[]");cart=Array.isArray(raw)?raw:[]}catch{cart=[]}}
-  function saveCart(){localStorage.setItem("ebnimaam_cart",JSON.stringify(cart));updateCartBadge()}
+  function persistCustomerCart(){
+    if(!customerCartSyncActive)return;
+    if(customerCartSyncTimer)clearTimeout(customerCartSyncTimer);
+    customerCartSyncTimer=setTimeout(async()=>{
+      try{const response=await fetch("/api/customer/cart",{method:"PUT",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:cart})});if(response.status===401)customerCartSyncActive=false}catch{}
+    },350);
+  }
+  function saveCart(){localStorage.setItem("ebnimaam_cart",JSON.stringify(cart));updateCartBadge();persistCustomerCart()}
+  async function syncCustomerCart(){
+    try{
+      const response=await fetch("/api/customer/cart",{credentials:"same-origin",cache:"no-store"});
+      if(response.status===401){customerCartSyncActive=false;return}
+      if(!response.ok)return;
+      const data=await response.json(),owner=String(data.userId||"");
+      if(!owner)return;
+      let previousOwner="";try{previousOwner=localStorage.getItem("ebnimaam_cart_owner")||""}catch{}
+      const localItems=previousOwner&&previousOwner!==owner?[]:cart;
+      const merged=new Map();
+      const add=line=>{
+        const item=itemForCart(line);if(!item||Number(item.stock)<1)return;
+        const size=String(line?.size||"One Size").slice(0,40),color=String(line?.color||"").slice(0,60);
+        const limit=Math.min(10,Number(item.stock),sizeStock(item,size));
+        const qty=Math.min(limit,Number(line?.qty));
+        if(!Number.isSafeInteger(qty)||qty<1)return;
+        const key=JSON.stringify([String(item.id),size,color]),prior=merged.get(key);
+        merged.set(key,{productId:String(item.id),size,color,qty:Math.max(qty,prior?.qty||0)});
+      };
+      (Array.isArray(data.items)?data.items:[]).forEach(add);
+      localItems.forEach(add);
+      cart=Array.from(merged.values()).slice(0,30);
+      localStorage.setItem("ebnimaam_cart_owner",owner);
+      customerCartSyncActive=true;
+      saveCart();renderCart();
+    }catch{}
+  }
   function updateCartBadge(){$("cartCount").textContent=String(cart.reduce((sum,item)=>sum+Number(item.qty||0),0))}
   function sizeStock(item,size){const map=item&&item.size_stock&&typeof item.size_stock==="object"?item.size_stock:{};return Object.prototype.hasOwnProperty.call(map,size)?Number(map[size]):Number(item.stock||0)}
   function itemForCart(item){return catalog.find(x=>String(x.id)===String(item.productId))}
@@ -419,6 +453,7 @@
         const ids=Array.isArray(recent)?recent.map(String).filter(value=>value!==String(product.id)):[];
         localStorage.setItem("ebnimaam_recently_viewed",JSON.stringify([String(product.id),...ids].slice(0,8)));
       }catch{}
+      await syncCustomerCart();
       $("loading").hidden=true;$("productApp").hidden=false;
       document.title=product.name+" | ebnimaam";
       $("breadcrumbName").textContent=product.name;
