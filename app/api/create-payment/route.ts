@@ -185,25 +185,7 @@ export async function POST(req: Request) {
     if (!Number.isSafeInteger(amountKobo)) throw new Error('The checkout total is too large.');
 
     reference = 'EBN-' + randomUUID();
-    if (body?.useWalletBalance === true && amountKobo > 10000) {
-      const walletClient = await pool.connect();
-      try {
-        await walletClient.query('BEGIN');
-        await walletClient.query('SELECT pg_advisory_xact_lock(hashtext($1))', [verifiedUser.id]);
-        const balance = await walletClient.query("SELECT COALESCE(SUM(amount_kobo),0)::bigint AS available FROM public.ebnimaam_wallet_ledger WHERE user_id=$1 AND status<>'rejected'", [verifiedUser.id]);
-        const available = Math.max(0, Number(balance.rows[0]?.available || 0));
-        walletAppliedKobo = Math.min(available, Math.max(0, amountKobo - 10000));
-        if (walletAppliedKobo > 0) {
-          await walletClient.query("INSERT INTO public.ebnimaam_wallet_ledger(user_id,entry_type,amount_kobo,status,source_key,description) VALUES($1,'wallet_spend',$2,'pending',$3,$4)", [verifiedUser.id, -walletAppliedKobo, 'wallet-checkout:' + reference, 'Ebnimaam balance reserved for checkout']);
-          walletReservationCreated = true;
-        }
-        await walletClient.query('COMMIT');
-      } catch (error) {
-        await walletClient.query('ROLLBACK');
-        throw error;
-      } finally { walletClient.release(); }
-    }
-    const paystackAmountKobo = amountKobo - walletAppliedKobo;
+
 
     if (coupon) {
       const couponClient = await pool.connect();
@@ -242,6 +224,26 @@ export async function POST(req: Request) {
         throw error;
       } finally { couponClient.release(); }
     }
+
+    if (body?.useWalletBalance === true && amountKobo > 10000) {
+      const walletClient = await pool.connect();
+      try {
+        await walletClient.query('BEGIN');
+        await walletClient.query('SELECT pg_advisory_xact_lock(hashtext($1))', [verifiedUser.id]);
+        const balance = await walletClient.query("SELECT COALESCE(SUM(amount_kobo),0)::bigint AS available FROM public.ebnimaam_wallet_ledger WHERE user_id=$1 AND status<>'rejected'", [verifiedUser.id]);
+        const available = Math.max(0, Number(balance.rows[0]?.available || 0));
+        walletAppliedKobo = Math.min(available, Math.max(0, amountKobo - 10000));
+        if (walletAppliedKobo > 0) {
+          await walletClient.query("INSERT INTO public.ebnimaam_wallet_ledger(user_id,entry_type,amount_kobo,status,source_key,description) VALUES($1,'wallet_spend',$2,'pending',$3,$4)", [verifiedUser.id, -walletAppliedKobo, 'wallet-checkout:' + reference, 'Ebnimaam balance reserved for checkout']);
+          walletReservationCreated = true;
+        }
+        await walletClient.query('COMMIT');
+      } catch (error) {
+        await walletClient.query('ROLLBACK');
+        throw error;
+      } finally { walletClient.release(); }
+    }
+    const paystackAmountKobo = amountKobo - walletAppliedKobo;
 
     await pool.query(
       `INSERT INTO public.ebnimaam_orders
