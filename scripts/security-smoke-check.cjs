@@ -10,12 +10,22 @@ const authProxy = fs.readFileSync('app/api/auth/[...path]/route.ts', 'utf8');
 const trackingRoute = fs.readFileSync('app/api/track-order/route.ts', 'utf8');
 const paymentVerification = fs.readFileSync('app/api/verify-payment/route.ts', 'utf8');
 const reviewRoute = fs.readFileSync('app/api/product-reviews/route.ts', 'utf8');
+const paymentInitialization = fs.readFileSync('app/api/create-payment/route.ts', 'utf8');
+const aiSupport = fs.readFileSync('app/api/chat/route.ts', 'utf8');
 
 assert.ok(config.includes("key: 'X-Content-Type-Options'") && config.includes("value: 'nosniff'"));
 assert.ok(config.includes("key: 'X-Frame-Options'") && config.includes("value: 'SAMEORIGIN'"));
 assert.ok(!config.includes("value: 'DENY'"));
 assert.ok(config.includes("key: 'Strict-Transport-Security'"));
 assert.ok(config.includes("key: 'Referrer-Policy'"));
+assert.ok(config.includes("camera=(self), microphone=(self), geolocation=()"));
+assert.ok(paymentInitialization.includes("const pickupAddress = String(storeSettings.pickupAddress || '').trim();"));
+assert.ok(paymentInitialization.includes("fulfilmentMethod === 'pickup' && !pickupAddress"));
+assert.ok(paymentInitialization.includes("const definitiveFailure ="));
+assert.ok(paymentInitialization.includes("verificationRequired: !definitiveFailure"));
+assert.ok(!aiSupport.includes('1–3 working days'));
+assert.ok(!aiSupport.includes('2–5 working days'));
+assert.ok(aiSupport.includes("pickupAddress:storeSettings.pickupAddress||''"));
 assert.ok(storefront.includes('id="accountFrame"'));
 assert.ok(storefront.includes("frame.src='/account.html?embedded=1'"));
 
