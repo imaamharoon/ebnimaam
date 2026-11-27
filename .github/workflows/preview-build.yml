@@ -1,0 +1,29 @@
+name: Preview build validation
+
+on:
+  push:
+    branches: [fix/paystack-size-stock-guards-20261127]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nextjs-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --package-lock=false
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Build Next.js production bundle
+        run: npm run build
