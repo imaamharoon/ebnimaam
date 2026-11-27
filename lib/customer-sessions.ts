@@ -99,6 +99,8 @@ export async function activateCustomerSession(response: NextResponse, req: Reque
      ON CONFLICT(user_id,device_hash) DO UPDATE SET device_label=EXCLUDED.device_label,last_seen_at=NOW()`,
     [user.id, deviceHash, label],
   );
+  // A browser/app installation must not keep two customer accounts signed in at once.
+  await pool.query('DELETE FROM public.ebnimaam_customer_sessions WHERE device_hash=$1 AND user_id<>$2', [deviceHash, user.id]);
   const sessionToken = randomBytes(32).toString('base64url');
   await pool.query(
     `INSERT INTO public.ebnimaam_customer_sessions(user_id,session_hash,device_hash,device_label,started_at,last_seen_at)
