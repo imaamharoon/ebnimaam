@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { Pool } from 'pg';
 import { checkRateLimit } from '../../../lib/rate-limit';
+import { sendOrderStatusEmail } from '../../../lib/order-notifications';
 
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
@@ -71,13 +72,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Enter your full name, a valid email address and a reachable phone number to continue.' }, { status: 400 });
     }
 
+    const fulfilmentMethod = String(body?.fulfilmentMethod || 'delivery').trim().toLowerCase();
+    if (!['delivery', 'pickup'].includes(fulfilmentMethod)) {
+      return NextResponse.json({ error: 'Choose home delivery or self-pickup to continue.' }, { status: 400 });
+    }
     const address = body?.address || {};
     const country = String(address.country || 'Nigeria').trim();
     const state = String(address.state || '').trim();
     const city = String(address.city || '').trim().slice(0, 100);
     const street = String(address.street || '').trim().slice(0, 240);
-    if (country !== 'Nigeria' || !states.has(state) || !city || !street) {
-      return NextResponse.json({ error: 'A complete Nigerian delivery address is required. International orders are not available.' }, { status: 400 });
+    if (country !== 'Nigeria' || (fulfilmentMethod === 'delivery' && (!states.has(state) || !city || !street))) {
+      return NextResponse.json({ error: 'A complete Nigerian delivery address is required for home delivery. International orders are not available.' }, { status: 400 });
     }
     if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 30) {
       return NextResponse.json({ error: 'Your cart is empty or contains too many items.' }, { status: 400 });
@@ -146,7 +151,13 @@ export async function POST(req: Request) {
     const settingsResult = await pool.query('SELECT settings FROM public.ebnimaam_store_settings WHERE id=1');
     const storeSettings = settingsResult.rows[0]?.settings || {};
     const configuredFees = storeSettings.deliveryFeesByState || {};
-    const deliveryFee = Number(configuredFees[state] ?? configuredFees.default ?? fallbackDelivery(state));
+    const pickupAddress = String(storeSettings.pickupAddress || '').trim();
+    if (fulfilmentMethod === 'pickup' && !pickupAddress) {
+      return NextResponse.json({ error: 'Self-pickup is not available yet. Please contact Ebnimaam or choose home delivery.' }, { status: 409 });
+    }
+    const deliveryFee = fulfilmentMethod === 'pickup'
+      ? 0
+      : Number(configuredFees[state] ?? configuredFees.default ?? fallbackDelivery(state));
     if (!Number.isSafeInteger(deliveryFee) || deliveryFee < 0 || deliveryFee > 50000) throw new Error('Delivery fee configuration is invalid. Please contact the store.');
     const amountNaira = subtotal - discount + deliveryFee;
     if (!Number.isSafeInteger(amountNaira) || amountNaira <= 0) throw new Error('The checkout total is invalid.');
@@ -160,7 +171,9 @@ export async function POST(req: Request) {
        VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,'NGN','pending','processing',$8::jsonb,'paystack',NOW(),NOW())`,
       [
         reference, verifiedUser.id, customerEmail, customerName, customerPhone,
-        JSON.stringify({ country: 'Nigeria', state, city, street, postal: String(address.postal || '').slice(0, 30), delivery_fee: deliveryFee, subtotal, discount, promo_code: discount ? promoCode : null }),
+        JSON.stringify(fulfilmentMethod === 'pickup'
+          ? { country: 'Nigeria', fulfilment_method: 'pickup', pickup_address: pickupAddress, pickup_hours: String(storeSettings.pickupHours || ''), delivery_fee: 0, subtotal, discount, promo_code: discount ? promoCode : null }
+          : { country: 'Nigeria', fulfilment_method: 'delivery', state, city, street, postal: String(address.postal || '').slice(0, 30), delivery_fee: deliveryFee, subtotal, discount, promo_code: discount ? promoCode : null }),
         amountKobo, JSON.stringify(items),
       ],
     );
@@ -176,7 +189,7 @@ export async function POST(req: Request) {
         email: customerEmail,
         amount: amountKobo,
         reference,
-        metadata: { order_reference: reference, delivery_fee: deliveryFee, subtotal, discount, customer_type: 'account' },
+        metadata: { order_reference: reference, delivery_fee: deliveryFee, fulfilment_method: fulfilmentMethod, subtotal, discount, customer_type: 'account' },
         callback_url: new URL('/payment-return.html', req.url).toString(),
       }),
       cache: 'no-store',
@@ -191,7 +204,8 @@ export async function POST(req: Request) {
       );
       return NextResponse.json({ error: message }, { status: 502 });
     }
-    return NextResponse.json({ authorization_url: paymentData.data.authorization_url, reference });
+    await sendOrderStatusEmail(reference, 'pending', new URL(req.url).origin).catch(() => ({ deliveryStatus: 'failed' }));
+    return NextResponse.json({ authorization_url: paymentData.data.authorization_url, reference, fulfilmentMethod, deliveryFee });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Payment initialization failed.' }, { status: reference ? 502 : 400 });
   }

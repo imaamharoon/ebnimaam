@@ -72,3 +72,27 @@ Never use real Paystack charges for a test. Distinguish implemented code from te
 - No Facebook/social login; Google OAuth is not enabled until real provider credentials are configured.
 - No automated SMS or WhatsApp system messages; WhatsApp is a customer contact link only.
 - No real payment charges as part of testing.
+
+
+## Customer fulfilment, tracking and email notifications
+
+Checkout offers **Home delivery** or **Pick up myself**. Pickup is enabled only after the owner saves a pickup address in Admin → Store settings. The API enforces a zero delivery fee for pickup and snapshots the pickup address/hours into the order, so later store-setting changes do not rewrite existing pickup instructions. Delivery orders continue to use the server-side Nigeria state fee schedule.
+
+The owner manages order progress in Admin → Orders:
+- Delivery: processing → picked → packed → shipped → delivered (or cancelled).
+- Self-pickup: processing → picked → packed → ready for pickup → collected (or cancelled).
+- Fulfilment cannot move into preparation/dispatch/collection before Paystack payment is verified.
+- Delivery tracking partner, reference and HTTPS courier URL can be saved on each delivery order. The customer tracking page also shows the store's progress timeline and refreshes automatically while opened.
+
+Customer order emails are sent for initial pending status, successful payment/processing, payment failure, picked items, dispatch, delivery, ready for pickup, collection and cancellation. A private HMAC-signed tracking link is included in each email; it expires after 90 days. Notification events are logged and de-duplicated so repeated admin saves do not repeatedly email customers. Admin can inspect notification delivery history and retry the current status notification.
+
+### Transactional email provider
+
+Transactional order email uses the Resend HTTP API. Configure both values in the existing Vercel project as encrypted/sensitive environment variables for Production and Preview:
+- RESEND_API_KEY — the API key from the Ebnimaam Resend account.
+- EMAIL_FROM — a sender address on a domain verified in Resend (for example, a store-owned orders address).
+
+Keep AUTH_SECRET configured; it signs private tracking links. Do not put these secrets in GitHub, source code, browser code or chat. Email delivery remains marked not_configured until both provider variables and the tracking signing secret are present. Verify the sender domain and send a controlled test to the store owner's inbox before enabling customer notification in production. The existing account verification/OTP email configuration is separate from these transactional order messages.
+
+The internal tracking page shows database status history and checks for updates every 30 seconds while the private link is open. Customers can also use the existing order-reference plus checkout-email lookup as a fallback. It is not a courier GPS feed. For map-based live location, a delivery partner API or rider location integration is required; a secure courier tracking URL can be saved per order in Admin.
+
