@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { sendOrderStatusEmail } from './order-notifications';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 type ReconcileResult =
@@ -84,6 +85,10 @@ export async function verifyAndReconcilePaystack(
         [reference,eventId,transactionId,eventName,JSON.stringify(safeEvent)],
       );
       await client.query('COMMIT');
+      if (terminalFailureStatuses.has(transactionStatus) && order.status !== 'paid') {
+        await sendOrderStatusEmail(reference, 'payment_failed', process.env.NEXT_PUBLIC_SITE_URL || 'https://ebnimaam.vercel.app')
+          .catch(() => ({ deliveryStatus: 'failed' }));
+      }
       return { paid: false, reference, status: transactionStatus || 'unconfirmed', alreadyProcessed: false };
     }
 
@@ -221,6 +226,10 @@ export async function verifyAndReconcilePaystack(
       [reference,eventId,transactionId,eventName,JSON.stringify(safeEvent)],
     );
     await client.query('COMMIT');
+    if (!alreadyProcessed) {
+      await sendOrderStatusEmail(reference, 'processing', process.env.NEXT_PUBLIC_SITE_URL || 'https://ebnimaam.vercel.app')
+        .catch(() => ({ deliveryStatus: 'failed' }));
+    }
     return { paid:true,reference,alreadyProcessed,fulfilmentStatus };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
