@@ -72,7 +72,7 @@
         </div>
         <div>
           <h2 class="section-heading">Made easy</h2>
-          <details class="accordion" open><summary>Delivery &amp; returns</summary><div class="accordion-content"><ul class="plain-list"><li>Jos, Abuja and Kano: usually 1–3 working days.</li><li>Lagos and other states: usually 2–5 working days.</li><li>Your exact delivery fee is calculated by destination at checkout before you pay.</li><li>Exchanges are accepted within 7 days of delivery when the item is unworn and its original tags are attached.</li></ul><p>For an existing order or a delivery question, use the WhatsApp support button.</p></div></details>
+          <details class="accordion" open><summary>Delivery &amp; returns</summary><div class="accordion-content"><ul class="plain-list"><li>Available delivery destinations and charges are shown at checkout only when the store has configured and confirmed them.</li><li>Any delivery estimate must come from the store's current delivery policy or a recorded order update.</li><li>Review the current returns and exchange policy before placing an order.</li></ul><p>For an existing order or a delivery question, use the WhatsApp support button.</p></div></details>
           <details class="accordion"><summary>Payments</summary><div class="accordion-content">Checkout is handled securely by Paystack. Available payment methods include card, bank transfer and USSD. Your order is confirmed after payment verification.</div></details>
         </div>
       </div>
@@ -91,6 +91,18 @@
         <p class="notice" id="reviewNotice" aria-live="polite"></p><button class="btn btn-secondary" type="submit">Submit verified review</button>
       </form>
     </section>
+  </section>
+  <section id="productQuestions" class="review-section">
+    <div class="eyebrow">Product information</div><h2 class="section-heading">Questions &amp; answers</h2>
+    <div id="productQuestionList" class="review-list"><p class="review-muted">Loading product questions…</p></div>
+    <form class="review-form" id="productQuestionForm">
+      <h3 style="font-family:'Playfair Display',serif;font-weight:500;margin:0">Ask about this product</h3>
+      <p class="review-muted">Questions are checked by Ebnimaam before appearing publicly. Sign in with your verified account to submit.</p>
+      <label for="productQuestionText">Your question</label>
+      <textarea id="productQuestionText" rows="3" minlength="8" maxlength="1200" required placeholder="Ask about material, sizing, care or product details…"></textarea>
+      <p class="notice" id="productQuestionNotice" aria-live="polite"></p>
+      <button class="btn btn-secondary" type="submit">Submit question</button>
+    </form>
   </section>
   <section id="recommendationsSection" class="review-section">
     <div class="eyebrow">Chosen for you</div><h2 class="section-heading">You may also like</h2>
@@ -341,6 +353,26 @@
     const observer=new IntersectionObserver(entries=>{$("stickyBuy").classList.toggle("visible",!entries[0].isIntersecting&&window.scrollY>180)},{threshold:0.1});
     observer.observe(target);
   }
+  async function loadProductQuestions(){
+    const list=$("productQuestionList");if(!list||!product)return;
+    try{
+      const response=await fetch("/api/product-questions?productId="+encodeURIComponent(product.id),{cache:"no-store"});
+      const data=await response.json();if(!response.ok)throw new Error(data.error||"Questions unavailable.");
+      const questions=Array.isArray(data.questions)?data.questions:[];
+      if(!questions.length){list.innerHTML='<p class="review-muted">No approved questions yet. Ask a question and Ebnimaam will review it before publication.</p>';return}
+      list.innerHTML=questions.map(question=>'<article style="padding:12px;border-bottom:1px solid var(--line)"><p style="margin:0 0 8px"><b>Q · '+escapeHtml(question.customer_name||"Customer")+'</b><br>'+escapeHtml(question.question)+'</p><p style="margin:0;padding:10px;background:var(--soft);white-space:pre-wrap"><b>A · Ebnimaam</b><br>'+escapeHtml(question.answer||"")+'</p></article>').join("");
+    }catch(error){list.innerHTML='<p class="review-muted">'+escapeHtml(error?.message||"Questions are temporarily unavailable.")+'</p>'}
+  }
+  $("productQuestionForm")?.addEventListener("submit",async event=>{
+    event.preventDefault();const form=event.currentTarget,button=form.querySelector('button[type="submit"]'),notice=$("productQuestionNotice");
+    button.disabled=true;notice.textContent="Submitting your question…";
+    try{
+      const response=await fetch("/api/product-questions",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({productId:product?.id,question:$("productQuestionText").value})});
+      const data=await response.json();if(!response.ok)throw new Error(data.error||"Your question could not be saved.");
+      form.reset();notice.textContent="Thank you. Your question has been sent for moderation and will appear after approval.";
+    }catch(error){notice.textContent=error?.message||"Your question could not be saved."}
+    finally{button.disabled=false}
+  });
   async function loadReviews(){
     try{
       const response=await fetch("/api/product-reviews?productId="+encodeURIComponent(product.id),{cache:"no-store"});
@@ -461,7 +493,7 @@
       $("productCategory").textContent=product.category||"The collection";
       $("productPrice").textContent=money(product.price);
       $("stickyPrice").textContent=money(product.price);
-      renderGallery();renderColors();renderSizes();renderDetails();renderChart();updateCartBadge();renderCart();loadReviews();loadRecommendations();setupSticky();
+      renderGallery();renderColors();renderSizes();renderDetails();renderChart();updateCartBadge();renderCart();loadReviews();loadProductQuestions();loadRecommendations();setupSticky();
       $("fitHeight").value="";$("fitWeight").value="";
     }catch(error){$("loading").innerHTML="<p>"+escapeHtml(error.message||"The product could not be loaded.")+"</p><a class='btn btn-secondary' href='/store.html'>Back to shop</a>"}
   }
