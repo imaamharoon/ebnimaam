@@ -39,9 +39,22 @@ export async function PATCH(req:Request){
   return NextResponse.json({error:'Invalid report status.'},{status:400});
  try{
   await ensureReportSchema();
-  const result=await pool.query('UPDATE public.ebnimaam_product_reviews SET moderation_status=$2 WHERE id=$1 RETURNING id',[reviewId,moderation]);
-  if(!result.rowCount)return NextResponse.json({error:'Review not found.'},{status:404});
-  if(reportStatus!==null)await pool.query('UPDATE public.ebnimaam_product_review_reports SET status=$2 WHERE review_id=$1',[reviewId,reportStatus]);
+  const client=await pool.connect();
+  try{
+   await client.query('BEGIN');
+   const result=await client.query('UPDATE public.ebnimaam_product_reviews SET moderation_status=$2 WHERE id=$1 RETURNING id',[reviewId,moderation]);
+   if(!result.rowCount){
+    await client.query('ROLLBACK');
+    return NextResponse.json({error:'Review not found.'},{status:404});
+   }
+   if(reportStatus!==null)await client.query('UPDATE public.ebnimaam_product_review_reports SET status=$2 WHERE review_id=$1',[reviewId,reportStatus]);
+   await client.query('COMMIT');
+  }catch(error){
+   await client.query('ROLLBACK').catch(()=>{});
+   throw error;
+  }finally{
+   client.release();
+  }
   await recordAdminActivity('product.review.moderated','product_review',reviewId,{moderation,reportStatus});
   return NextResponse.json({ok:true},{headers:{'cache-control':'no-store'}});
  }catch{return NextResponse.json({error:'Review moderation failed.'},{status:503});}
