@@ -5,6 +5,7 @@ const vm = require('node:vm');
 const config = fs.readFileSync('next.config.js', 'utf8');
 const storefront = fs.readFileSync('public/store.html', 'utf8');
 const account = fs.readFileSync('public/account.html', 'utf8');
+const productPage = fs.readFileSync('public/product.html', 'utf8');
 const sessionGuard = fs.readFileSync('lib/customer-sessions.ts', 'utf8');
 const authProxy = fs.readFileSync('app/api/auth/[...path]/route.ts', 'utf8');
 const trackingRoute = fs.readFileSync('app/api/track-order/route.ts', 'utf8');
@@ -44,11 +45,22 @@ assert.ok(serviceWorker.includes("url.pathname === '/store.html'"));
 assert.ok(serviceWorker.includes("url.pathname.startsWith('/assets/')"));
 assert.ok(offlinePage.includes("You're offline"));
 assert.ok(offlinePage.includes('live prices, stock, account details, orders and checkout need an internet connection'));
+assert.ok(!storefront.includes("const fallback=state==='Plateau'"));
+assert.ok(!storefront.includes('fees[state]??fees.default??fallback'));
+assert.ok(!productPage.includes('deliveryFees={default:5000}'));
+assert.ok(!productPage.includes('deliveryFees.default??5000'));
+assert.ok(storefront.includes('id="compareOverlay"'));
+assert.ok(storefront.includes('data-compare-id='));
+assert.ok(storefront.includes("localStorage.setItem('ebnimaam_compare'"));
+assert.ok(storefront.includes("ebnimaam_recently_viewed"));
+assert.ok(productPage.includes('ebnimaam_recently_viewed'));
+assert.ok(!serviceWorker.includes("key !== CACHE_NAME).map(key => caches.delete(key))"));
+assert.ok(!serviceWorker.includes("caches.match(request).then(cached=>cached||fetch(request))"));
 assert.ok(storefront.includes('id="accountFrame"'));
 assert.ok(storefront.includes("frame.src='/account.html?embedded=1'"));
 
 // Parse inline storefront/account scripts to catch browser-side syntax errors.
-for (const [file, html] of [['public/store.html', storefront], ['public/account.html', account]]) {
+for (const [file, html] of [['public/store.html', storefront], ['public/account.html', account], ['public/product.html', productPage]]) {
   const scripts = html.split('<script').slice(1).map((block) => {
     const start = block.indexOf('>');
     const end = block.indexOf('</script>');
@@ -76,4 +88,5 @@ assert.ok(storefront.includes('window.trackOrder'));
 assert.ok(storefront.includes('whatsappChannel'));
 assert.ok(account.includes('continueAfterAccountAuth'));
 
-process.stdout.write('Security headers, browser script syntax, account-bound order access, and single-device session smoke checks passed.\\n');
+new vm.Script(serviceWorker, { filename: 'public/service-worker.js' });
+process.stdout.write('Security headers, browser script syntax, account-bound order access, single-device sessions, offline-cache boundaries, delivery pricing, and shop comparison smoke checks passed.\\n');
