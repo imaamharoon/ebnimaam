@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { Pool } from 'pg';
 import { checkRateLimit } from '../../../lib/rate-limit';
 import { sendOrderStatusEmail } from '../../../lib/order-notifications';
+import { ensureLoyaltyTables } from '../../../lib/loyalty';
 
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
@@ -22,6 +23,7 @@ function fallbackDelivery(state: string) { return deliveryFees[state] ?? 5000; }
 
 export async function POST(req: Request) {
   let reference = '';
+  let couponReservationCreated = false;
   const declaredSize = Number(req.headers.get('content-length') || 0);
   if (Number.isFinite(declaredSize) && declaredSize > 32_768) {
     return NextResponse.json({ error: 'Your checkout request is too large. Please review your cart and try again.' }, { status: 413 });
@@ -63,6 +65,7 @@ export async function POST(req: Request) {
     if (!verifiedUser) {
       return NextResponse.json({ error: 'Please sign in to your Ebnimaam account before checkout.' }, { status: 401 });
     }
+    await ensureLoyaltyTables();
 
     const customerNameInput = String(body?.customer?.name || '').trim().slice(0, 120);
     const customerPhone = String(body?.customer?.phone || '').trim().slice(0, 40);
@@ -143,11 +146,23 @@ export async function POST(req: Request) {
       return { productId: item.productId, name: String(product.name), size: item.size, color: item.color || null, qty: item.qty, price: Number(product.price) };
     });
 
-    const promoCode = String(body?.promoCode || '').trim().toUpperCase();
+    const promoCode = String(body?.promoCode || '').trim().toUpperCase().slice(0, 24);
+    let discount = 0;
+    let coupon: any = null;
     if (promoCode) {
-      return NextResponse.json({ error: 'Promotional codes are not currently available. Please remove the code and continue.' }, { status: 400 });
+      const couponResult = await pool.query("SELECT code,discount_type,discount_value,minimum_subtotal_kobo,max_redemptions,per_user_limit,starts_at,ends_at,is_active FROM public.ebnimaam_coupons WHERE code=$1", [promoCode]);
+      if (!couponResult.rowCount) return NextResponse.json({ error: 'That coupon code is not valid.' }, { status: 400 });
+      coupon = couponResult.rows[0];
+      const now = Date.now();
+      if (!coupon.is_active || (coupon.starts_at && new Date(coupon.starts_at).getTime() > now) || (coupon.ends_at && new Date(coupon.ends_at).getTime() <= now)) {
+        return NextResponse.json({ error: 'That coupon is not active at this time.' }, { status: 400 });
+      }
+      if (subtotal * 100 < Number(coupon.minimum_subtotal_kobo || 0)) return NextResponse.json({ error: 'Your basket does not meet the minimum subtotal for this coupon.' }, { status: 400 });
+      discount = coupon.discount_type === 'percent'
+        ? Math.floor(subtotal * Number(coupon.discount_value) / 100)
+        : Math.floor(Math.min(subtotal * 100, Number(coupon.discount_value)) / 100);
+      if (!Number.isSafeInteger(discount) || discount <= 0 || discount >= subtotal) return NextResponse.json({ error: 'This coupon cannot be applied to the current basket.' }, { status: 400 });
     }
-    const discount = 0;
     const settingsResult = await pool.query('SELECT settings FROM public.ebnimaam_store_settings WHERE id=1');
     const storeSettings = settingsResult.rows[0]?.settings || {};
     const configuredFees = storeSettings.deliveryFeesByState || {};
@@ -165,6 +180,43 @@ export async function POST(req: Request) {
     if (!Number.isSafeInteger(amountKobo)) throw new Error('The checkout total is too large.');
 
     reference = 'EBN-' + randomUUID();
+    if (coupon) {
+      const couponClient = await pool.connect();
+      try {
+        await couponClient.query('BEGIN');
+        const lockedCoupon = await couponClient.query('SELECT * FROM public.ebnimaam_coupons WHERE code=$1 FOR UPDATE', [promoCode]);
+        if (!lockedCoupon.rowCount || !lockedCoupon.rows[0].is_active
+          || (lockedCoupon.rows[0].starts_at && new Date(lockedCoupon.rows[0].starts_at).getTime() > Date.now())
+          || (lockedCoupon.rows[0].ends_at && new Date(lockedCoupon.rows[0].ends_at).getTime() <= Date.now())) {
+          await couponClient.query('ROLLBACK');
+          return NextResponse.json({ error: 'This coupon is no longer active.' }, { status: 409 });
+        }
+        const currentCoupon = lockedCoupon.rows[0];
+        if (String(currentCoupon.discount_type) !== String(coupon.discount_type) || Number(currentCoupon.discount_value) !== Number(coupon.discount_value)) {
+          await couponClient.query('ROLLBACK');
+          return NextResponse.json({ error: 'This coupon changed while checkout was open. Please refresh and try again.' }, { status: 409 });
+        }
+        const uses = await couponClient.query("SELECT COUNT(*)::int AS total,COUNT(*) FILTER (WHERE user_id=$2)::int AS customer_uses FROM public.ebnimaam_coupon_redemptions WHERE code=$1 AND status IN ('pending','paid')", [promoCode, verifiedUser.id]);
+        if (currentCoupon.max_redemptions && Number(uses.rows[0]?.total || 0) >= Number(currentCoupon.max_redemptions)) {
+          await couponClient.query('ROLLBACK');
+          return NextResponse.json({ error: 'This coupon has reached its use limit.' }, { status: 409 });
+        }
+        if (Number(uses.rows[0]?.customer_uses || 0) >= Number(currentCoupon.per_user_limit || 1)) {
+          await couponClient.query('ROLLBACK');
+          return NextResponse.json({ error: 'You have already used this coupon the maximum number of times.' }, { status: 409 });
+        }
+        await couponClient.query(
+          "INSERT INTO public.ebnimaam_coupon_redemptions(code,user_id,reference,discount_kobo,status) VALUES($1,$2,$3,$4,'pending')",
+          [promoCode, verifiedUser.id, reference, discount * 100]
+        );
+        await couponClient.query('COMMIT');
+        couponReservationCreated = true;
+      } catch (error) {
+        await couponClient.query('ROLLBACK');
+        throw error;
+      } finally { couponClient.release(); }
+    }
+
     await pool.query(
       `INSERT INTO public.ebnimaam_orders
        (reference,auth_user_id,customer_email,customer_name,customer_phone,address,amount_kobo,currency,status,fulfilment_status,items,payment_provider,created_at,updated_at)
@@ -202,11 +254,13 @@ export async function POST(req: Request) {
         'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
         [reference, 'initialization_failed', message.slice(0, 500), 'paystack'],
       );
+      if (couponReservationCreated) await pool.query("UPDATE public.ebnimaam_coupon_redemptions SET status='released',updated_at=NOW() WHERE reference=$1 AND status='pending'", [reference]).catch(() => {});
       return NextResponse.json({ error: message }, { status: 502 });
     }
     await sendOrderStatusEmail(reference, 'pending', new URL(req.url).origin).catch(() => ({ deliveryStatus: 'failed' }));
     return NextResponse.json({ authorization_url: paymentData.data.authorization_url, reference, fulfilmentMethod, deliveryFee });
   } catch (error: any) {
+    if (reference && couponReservationCreated) await pool.query("UPDATE public.ebnimaam_coupon_redemptions SET status='released',updated_at=NOW() WHERE reference=$1 AND status='pending'", [reference]).catch(() => {});
     return NextResponse.json({ error: error?.message || 'Payment initialization failed.' }, { status: reference ? 502 : 400 });
   }
 }

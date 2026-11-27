@@ -54,6 +54,16 @@ export async function PATCH(req: Request) {
       const threshold = Number(body.low_stock_threshold);
       if (!Number.isInteger(threshold) || threshold < 1 || threshold > 500) return responseError('Low-stock threshold must be from 1 to 500 units.');
       await loyaltyPool.query('UPDATE public.ebnimaam_loyalty_settings SET referrer_reward_kobo=$1,referred_reward_kobo=$2,challenge_reward_kobo=$3,low_stock_threshold=$4,updated_at=NOW() WHERE id=1', [referrer, referred, challenge, threshold]);
+      await processAllQualifiedReferralRewards();
+      if (challenge > 0) {
+        const completedTeams = await loyaltyPool.query("SELECT t.id FROM public.ebnimaam_challenge_teams t WHERE t.challenge_slug='seven-day-team-challenge' AND (SELECT COUNT(DISTINCT day_number) FROM public.ebnimaam_challenge_submissions s WHERE s.team_id=t.id AND s.status='approved')=7");
+        for (const team of completedTeams.rows) {
+          const members = await loyaltyPool.query('SELECT user_id FROM public.ebnimaam_challenge_members WHERE team_id=$1', [team.id]);
+          for (const member of members.rows) {
+            await loyaltyPool.query("INSERT INTO public.ebnimaam_wallet_ledger(user_id,entry_type,amount_kobo,status,source_key,description) VALUES($1,'challenge_reward',$2,'available',$3,$4) ON CONFLICT(source_key) DO NOTHING", [member.user_id, challenge, 'challenge-reward:' + team.id + ':' + member.user_id, 'Reward for completing the seven-day team challenge']);
+          }
+        }
+      }
       return NextResponse.json({ ok: true, message: 'Rewards and low-stock settings saved. Existing balances were not changed.' });
     }
 

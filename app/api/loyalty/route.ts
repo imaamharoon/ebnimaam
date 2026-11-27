@@ -20,7 +20,7 @@ export async function GET(req: Request) {
       loyaltyPool.query("SELECT COALESCE(SUM(amount_kobo),0)::bigint AS balance_kobo,COUNT(*)::int AS entries FROM public.ebnimaam_wallet_ledger WHERE user_id=$1 AND status<>'rejected'", [user.id]),
       loyaltyPool.query("SELECT COUNT(*) FILTER (WHERE status='qualified')::int AS qualified,COUNT(*) FILTER (WHERE status='pending')::int AS pending FROM public.ebnimaam_referrals WHERE referrer_user_id=$1", [user.id]),
       loyaltyPool.query('SELECT referrer_reward_kobo,referred_reward_kobo,challenge_reward_kobo FROM public.ebnimaam_loyalty_settings WHERE id=1'),
-      loyaltyPool.query("SELECT t.id,t.invite_code,t.leader_user_id,t.created_at,COUNT(DISTINCT m.user_id)::int AS member_count,COALESCE(json_agg(json_build_object('day_number',s.day_number,'status',s.status,'admin_note',s.admin_note,'created_at',s.created_at) ORDER BY s.day_number) FILTER (WHERE s.id IS NOT NULL),'[]'::json) AS submissions FROM public.ebnimaam_challenge_members mine JOIN public.ebnimaam_challenge_teams t ON t.id=mine.team_id JOIN public.ebnimaam_challenge_members m ON m.team_id=t.id LEFT JOIN public.ebnimaam_challenge_submissions s ON s.team_id=t.id WHERE mine.user_id=$1 AND t.challenge_slug=$2 GROUP BY t.id LIMIT 1", [user.id, challengeDefinition.slug]),
+      loyaltyPool.query("SELECT t.id,t.invite_code,t.leader_user_id,t.created_at,COUNT(DISTINCT m.user_id)::int AS member_count,COALESCE((SELECT json_agg(json_build_object('day_number',s.day_number,'status',s.status,'admin_note',s.admin_note,'created_at',s.created_at) ORDER BY s.day_number) FROM public.ebnimaam_challenge_submissions s WHERE s.team_id=t.id),'[]'::json) AS submissions FROM public.ebnimaam_challenge_members mine JOIN public.ebnimaam_challenge_teams t ON t.id=mine.team_id JOIN public.ebnimaam_challenge_members m ON m.team_id=t.id WHERE mine.user_id=$1 AND t.challenge_slug=$2 GROUP BY t.id LIMIT 1", [user.id, challengeDefinition.slug]),
       loyaltyPool.query("SELECT id,entry_type,amount_kobo,status,description,created_at FROM public.ebnimaam_wallet_ledger WHERE user_id=$1 ORDER BY created_at DESC LIMIT 30", [user.id])
     ]);
     return NextResponse.json({
@@ -111,7 +111,7 @@ export async function POST(req: Request) {
       if (!team.rowCount) return fail('Join or create a team before submitting a milestone.');
       const started = new Date(team.rows[0].created_at).getTime();
       if (Date.now() < started + (day - 1) * 24 * 60 * 60 * 1000) return fail('That milestone opens after the previous challenge day has passed.');
-      const submitted = await loyaltyPool.query('INSERT INTO public.ebnimaam_challenge_submissions(team_id,day_number,submitted_by,evidence) VALUES($1,$2,$3,$4) ON CONFLICT(team_id,day_number) DO NOTHING RETURNING id', [team.rows[0].id, day, user.id, evidence]);
+      const submitted = await loyaltyPool.query("INSERT INTO public.ebnimaam_challenge_submissions(team_id,day_number,submitted_by,evidence) VALUES($1,$2,$3,$4) ON CONFLICT(team_id,day_number) DO UPDATE SET submitted_by=EXCLUDED.submitted_by,evidence=EXCLUDED.evidence,status='pending',admin_note=NULL,reviewed_at=NULL,created_at=NOW() WHERE public.ebnimaam_challenge_submissions.status='rejected' RETURNING id", [team.rows[0].id, day, user.id, evidence]);
       if (!submitted.rowCount) return fail('This milestone has already been submitted by your team.');
       return NextResponse.json({ ok: true, message: 'Milestone submitted for owner review. Rewards are not released until all seven days are approved.' });
     }

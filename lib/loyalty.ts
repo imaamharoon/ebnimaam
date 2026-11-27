@@ -56,7 +56,7 @@ export async function ensureLoyaltyTables() {
     CREATE TABLE IF NOT EXISTS public.ebnimaam_wallet_ledger (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id TEXT NOT NULL,
-      entry_type TEXT NOT NULL CHECK (entry_type IN ('referral_reward','challenge_reward','refund_credit','bank_refund_request')),
+      entry_type TEXT NOT NULL CHECK (entry_type IN ('referral_reward','challenge_reward','refund_credit','bank_refund_request','wallet_spend')),
       amount_kobo BIGINT NOT NULL CHECK (amount_kobo <> 0),
       status TEXT NOT NULL DEFAULT 'available' CHECK (status IN ('available','pending','completed','rejected')),
       source_key TEXT NOT NULL UNIQUE,
@@ -83,6 +83,35 @@ export async function ensureLoyaltyTables() {
       CHECK (referred_user_id <> referrer_user_id)
     );
     CREATE INDEX IF NOT EXISTS ebnimaam_referrals_owner_idx ON public.ebnimaam_referrals(referrer_user_id,status);
+    CREATE TABLE IF NOT EXISTS public.ebnimaam_coupons (
+      code TEXT PRIMARY KEY,
+      discount_type TEXT NOT NULL CHECK (discount_type IN ('percent','fixed')),
+      discount_value BIGINT NOT NULL CHECK (discount_value > 0),
+      minimum_subtotal_kobo BIGINT NOT NULL DEFAULT 0 CHECK (minimum_subtotal_kobo >= 0),
+      max_redemptions INTEGER,
+      per_user_limit INTEGER NOT NULL DEFAULT 1 CHECK (per_user_limit BETWEEN 1 AND 100),
+      starts_at TIMESTAMPTZ,
+      ends_at TIMESTAMPTZ,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS public.ebnimaam_coupon_redemptions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      code TEXT NOT NULL REFERENCES public.ebnimaam_coupons(code),
+      user_id TEXT NOT NULL,
+      reference TEXT NOT NULL UNIQUE,
+      discount_kobo BIGINT NOT NULL CHECK (discount_kobo > 0),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','released')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS ebnimaam_coupon_redemptions_code_idx ON public.ebnimaam_coupon_redemptions(code,status);
+    CREATE INDEX IF NOT EXISTS ebnimaam_coupon_redemptions_user_idx ON public.ebnimaam_coupon_redemptions(code,user_id,status);
+
+    ALTER TABLE public.ebnimaam_wallet_ledger DROP CONSTRAINT IF EXISTS ebnimaam_wallet_ledger_entry_type_check;
+    ALTER TABLE public.ebnimaam_wallet_ledger ADD CONSTRAINT ebnimaam_wallet_ledger_entry_type_check
+      CHECK (entry_type IN ('referral_reward','challenge_reward','refund_credit','bank_refund_request','wallet_spend'));
 
     CREATE TABLE IF NOT EXISTS public.ebnimaam_challenge_teams (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

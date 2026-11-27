@@ -150,6 +150,23 @@
         if (found && found.admin_note) milestones.appendChild(node("p", "Owner note: " + found.admin_note, "eb-member-muted"));
       });
       chCard.appendChild(milestones);
+      button("Add challenge milestones to calendar", chCard, function () {
+        function icalEscape(value) { return String(value).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n"); }
+        function stamp(date) { return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z"); }
+        var events = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Ebnimaam//Seven Day Team Quest//EN","CALSCALE:GREGORIAN"];
+        var base = new Date(team.created_at);
+        (def.milestones || []).forEach(function (milestone, index) {
+          var start = new Date(base.getTime()); start.setUTCDate(start.getUTCDate() + index); start.setUTCHours(8,0,0,0);
+          var finish = new Date(start.getTime() + 60 * 60 * 1000);
+          events.push("BEGIN:VEVENT","UID:ebnimaam-" + String(team.id) + "-day-" + (index + 1) + "@ebnimaam","DTSTAMP:" + stamp(new Date()),"DTSTART:" + stamp(start),"DTEND:" + stamp(finish),"SUMMARY:" + icalEscape("Ebnimaam team challenge · Day " + (index + 1)),"DESCRIPTION:" + icalEscape(milestone),"END:VEVENT");
+        });
+        events.push("END:VCALENDAR");
+        var blob = new Blob([events.join("\r\n")], { type: "text/calendar;charset=utf-8" });
+        var url = URL.createObjectURL(blob), link = document.createElement("a");
+        link.href = url; link.download = "ebnimaam-seven-day-team-quest.ics"; document.body.appendChild(link); link.click(); link.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1200);
+      });
+
       var evidenceForm = node("form", null, "eb-member-form");
       var dayWrap = node("label", null, "eb-member-field"); dayWrap.appendChild(node("span", "Milestone day"));
       var daySelect = node("select"); daySelect.required = true;
