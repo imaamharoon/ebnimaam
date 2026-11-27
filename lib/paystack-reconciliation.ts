@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { sendOrderStatusEmail } from './order-notifications';
+import { processPaidReferralOrder } from './loyalty';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 type ReconcileResult =
@@ -226,6 +227,7 @@ export async function verifyAndReconcilePaystack(
       [reference,eventId,transactionId,eventName,JSON.stringify(safeEvent)],
     );
     await client.query('COMMIT');
+    await processPaidReferralOrder(reference).catch((error) => console.warn('Referral reward reconciliation failed:', error));
     if (!alreadyProcessed) {
       await sendOrderStatusEmail(reference, 'processing', process.env.NEXT_PUBLIC_SITE_URL || 'https://ebnimaam.vercel.app')
         .catch(() => ({ deliveryStatus: 'failed' }));
