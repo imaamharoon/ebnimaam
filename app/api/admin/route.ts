@@ -76,6 +76,37 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'A valid order reference is required.' }, { status: 400 });
   }
 
+  if (body?.tracking_update === true) {
+    const carrier = String(body?.trackingCarrier || '').trim().slice(0, 100);
+    const trackingCode = String(body?.trackingCode || '').trim().slice(0, 120);
+    const trackingUrlInput = String(body?.trackingUrl || '').trim().slice(0, 2000);
+    let trackingUrl: string | null = null;
+    if (trackingUrlInput) {
+      try {
+        const parsed = new URL(trackingUrlInput);
+        if (parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new Error();
+        trackingUrl = parsed.toString();
+      } catch {
+        return NextResponse.json({ error: 'Enter a valid HTTPS courier tracking link.' }, { status: 400 });
+      }
+    }
+    try {
+      const updated = await pool.query(
+        "UPDATE public.ebnimaam_orders SET address=COALESCE(address,'{}'::jsonb) || $1::jsonb,updated_at=NOW() WHERE reference=$2 RETURNING fulfilment_status",
+        [JSON.stringify({ tracking_carrier: carrier, tracking_code: trackingCode, tracking_url: trackingUrl || '' }), reference],
+      );
+      if (!updated.rowCount) return NextResponse.json({ error: 'Order not found.' }, { status: 404 });
+      await pool.query(
+        'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
+        [reference, 'tracking_updated', 'Courier tracking information updated.', 'admin'],
+      );
+      await recordAdminActivity('order.tracking.updated', 'order', reference, { carrier: carrier || null, hasTrackingUrl: Boolean(trackingUrl), hasTrackingCode: Boolean(trackingCode) });
+      return NextResponse.json({ ok: true, trackingCarrier: carrier, trackingCode, trackingUrl });
+    } catch {
+      return NextResponse.json({ error: 'Courier tracking details could not be saved.' }, { status: 500 });
+    }
+  }
+
   if (body?.resend_notification === true) {
     try {
       const found = await pool.query('SELECT status,fulfilment_status FROM public.ebnimaam_orders WHERE reference=$1', [reference]);
