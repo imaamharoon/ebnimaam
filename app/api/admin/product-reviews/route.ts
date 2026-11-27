@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { isAdminRequest } from '../../../../../lib/admin-auth';
-import { recordAdminActivity } from '../../../../../lib/admin-audit';
+import { isAdminRequest } from '../../../../lib/admin-auth';
+import { recordAdminActivity } from '../../../../lib/admin-audit';
 
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
