@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { getVerifiedCustomer } from '../../../../../lib/loyalty';
-import { checkRateLimit } from '../../../../../lib/rate-limit';
+import { getVerifiedCustomer } from '../../../../lib/loyalty';
+import { checkRateLimit } from '../../../../lib/rate-limit';
 
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
