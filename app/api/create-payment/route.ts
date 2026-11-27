@@ -24,6 +24,8 @@ function fallbackDelivery(state: string) { return deliveryFees[state] ?? 5000; }
 export async function POST(req: Request) {
   let reference = '';
   let couponReservationCreated = false;
+  let walletReservationCreated = false;
+  let walletAppliedKobo = 0;
   const declaredSize = Number(req.headers.get('content-length') || 0);
   if (Number.isFinite(declaredSize) && declaredSize > 32_768) {
     return NextResponse.json({ error: 'Your checkout request is too large. Please review your cart and try again.' }, { status: 413 });
@@ -66,6 +68,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Please sign in to your Ebnimaam account before checkout.' }, { status: 401 });
     }
     await ensureLoyaltyTables();
+    await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS paystack_amount_kobo BIGINT');
+    await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS wallet_amount_kobo BIGINT NOT NULL DEFAULT 0');
+    await pool.query('UPDATE public.ebnimaam_orders SET paystack_amount_kobo=amount_kobo WHERE paystack_amount_kobo IS NULL');
 
     const customerNameInput = String(body?.customer?.name || '').trim().slice(0, 120);
     const customerPhone = String(body?.customer?.phone || '').trim().slice(0, 40);
@@ -180,6 +185,26 @@ export async function POST(req: Request) {
     if (!Number.isSafeInteger(amountKobo)) throw new Error('The checkout total is too large.');
 
     reference = 'EBN-' + randomUUID();
+    if (body?.useWalletBalance === true && amountKobo > 10000) {
+      const walletClient = await pool.connect();
+      try {
+        await walletClient.query('BEGIN');
+        await walletClient.query('SELECT pg_advisory_xact_lock(hashtext($1))', [verifiedUser.id]);
+        const balance = await walletClient.query("SELECT COALESCE(SUM(amount_kobo),0)::bigint AS available FROM public.ebnimaam_wallet_ledger WHERE user_id=$1 AND status<>'rejected'", [verifiedUser.id]);
+        const available = Math.max(0, Number(balance.rows[0]?.available || 0));
+        walletAppliedKobo = Math.min(available, Math.max(0, amountKobo - 10000));
+        if (walletAppliedKobo > 0) {
+          await walletClient.query("INSERT INTO public.ebnimaam_wallet_ledger(user_id,entry_type,amount_kobo,status,source_key,description) VALUES($1,'wallet_spend',$2,'pending',$3,$4)", [verifiedUser.id, -walletAppliedKobo, 'wallet-checkout:' + reference, 'Ebnimaam balance reserved for checkout']);
+          walletReservationCreated = true;
+        }
+        await walletClient.query('COMMIT');
+      } catch (error) {
+        await walletClient.query('ROLLBACK');
+        throw error;
+      } finally { walletClient.release(); }
+    }
+    const paystackAmountKobo = amountKobo - walletAppliedKobo;
+
     if (coupon) {
       const couponClient = await pool.connect();
       try {
@@ -219,14 +244,14 @@ export async function POST(req: Request) {
 
     await pool.query(
       `INSERT INTO public.ebnimaam_orders
-       (reference,auth_user_id,customer_email,customer_name,customer_phone,address,amount_kobo,currency,status,fulfilment_status,items,payment_provider,created_at,updated_at)
-       VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,'NGN','pending','processing',$8::jsonb,'paystack',NOW(),NOW())`,
+       (reference,auth_user_id,customer_email,customer_name,customer_phone,address,amount_kobo,paystack_amount_kobo,wallet_amount_kobo,currency,status,fulfilment_status,items,payment_provider,created_at,updated_at)
+       VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,'NGN','pending','processing',$10::jsonb,'paystack',NOW(),NOW())`,
       [
         reference, verifiedUser.id, customerEmail, customerName, customerPhone,
         JSON.stringify(fulfilmentMethod === 'pickup'
           ? { country: 'Nigeria', fulfilment_method: 'pickup', pickup_address: pickupAddress, pickup_hours: String(storeSettings.pickupHours || ''), delivery_fee: 0, subtotal, discount, promo_code: discount ? promoCode : null }
           : { country: 'Nigeria', fulfilment_method: 'delivery', state, city, street, postal: String(address.postal || '').slice(0, 30), delivery_fee: deliveryFee, subtotal, discount, promo_code: discount ? promoCode : null }),
-        amountKobo, JSON.stringify(items),
+        amountKobo, paystackAmountKobo, walletAppliedKobo, JSON.stringify(items),
       ],
     );
     await pool.query(
@@ -239,9 +264,9 @@ export async function POST(req: Request) {
       headers: { Authorization: 'Bearer ' + process.env.PAYSTACK_SECRET_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: customerEmail,
-        amount: amountKobo,
+        amount: paystackAmountKobo,
         reference,
-        metadata: { order_reference: reference, delivery_fee: deliveryFee, fulfilment_method: fulfilmentMethod, subtotal, discount, customer_type: 'account' },
+        metadata: { order_reference: reference, delivery_fee: deliveryFee, fulfilment_method: fulfilmentMethod, subtotal, discount, wallet_amount_kobo: walletAppliedKobo, customer_type: 'account' },
         callback_url: new URL('/payment-return.html', req.url).toString(),
       }),
       cache: 'no-store',
@@ -255,12 +280,14 @@ export async function POST(req: Request) {
         [reference, 'initialization_failed', message.slice(0, 500), 'paystack'],
       );
       if (couponReservationCreated) await pool.query("UPDATE public.ebnimaam_coupon_redemptions SET status='released',updated_at=NOW() WHERE reference=$1 AND status='pending'", [reference]).catch(() => {});
+      if (walletReservationCreated) await pool.query("UPDATE public.ebnimaam_wallet_ledger SET status='rejected',updated_at=NOW() WHERE source_key=$1 AND status='pending'", ['wallet-checkout:' + reference]).catch(() => {});
       return NextResponse.json({ error: message }, { status: 502 });
     }
     await sendOrderStatusEmail(reference, 'pending', new URL(req.url).origin).catch(() => ({ deliveryStatus: 'failed' }));
-    return NextResponse.json({ authorization_url: paymentData.data.authorization_url, reference, fulfilmentMethod, deliveryFee });
+    return NextResponse.json({ authorization_url: paymentData.data.authorization_url, reference, fulfilmentMethod, deliveryFee, walletAppliedKobo, paystackAmountKobo });
   } catch (error: any) {
     if (reference && couponReservationCreated) await pool.query("UPDATE public.ebnimaam_coupon_redemptions SET status='released',updated_at=NOW() WHERE reference=$1 AND status='pending'", [reference]).catch(() => {});
+    if (reference && walletReservationCreated) await pool.query("UPDATE public.ebnimaam_wallet_ledger SET status='rejected',updated_at=NOW() WHERE source_key=$1 AND status='pending'", ['wallet-checkout:' + reference]).catch(() => {});
     return NextResponse.json({ error: error?.message || 'Payment initialization failed.' }, { status: reference ? 502 : 400 });
   }
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
-import { isAdminRequest } from '../../../../../lib/admin-auth';
-import { loyaltyPool, ensureLoyaltyTables, decryptPrivateDetails } from '../../../../../lib/loyalty';
+import { isAdminRequest } from '../../../../lib/admin-auth';
+import { loyaltyPool, ensureLoyaltyTables, decryptPrivateDetails, processAllQualifiedReferralRewards } from '../../../../lib/loyalty';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,11 +13,12 @@ export async function GET(req: Request) {
   if (!isAdminRequest(req, secret)) return unauth();
   try {
     await ensureLoyaltyTables();
-    const [settings, requests, submissions, referralStats] = await Promise.all([
+    const [settings, requests, submissions, referralStats, coupons] = await Promise.all([
       loyaltyPool.query('SELECT * FROM public.ebnimaam_loyalty_settings WHERE id=1'),
       loyaltyPool.query("SELECT id,user_id,amount_kobo,status,description,private_details,created_at FROM public.ebnimaam_wallet_ledger WHERE entry_type='bank_refund_request' AND status='pending' ORDER BY created_at ASC LIMIT 100"),
       loyaltyPool.query("SELECT s.id,s.team_id,s.day_number,s.submitted_by,s.evidence,s.status,s.admin_note,s.created_at,t.invite_code,t.created_at AS team_started_at,(SELECT COUNT(*)::int FROM public.ebnimaam_challenge_members m WHERE m.team_id=t.id) AS member_count FROM public.ebnimaam_challenge_submissions s JOIN public.ebnimaam_challenge_teams t ON t.id=s.team_id WHERE s.status='pending' ORDER BY s.created_at ASC LIMIT 100"),
-      loyaltyPool.query("SELECT COUNT(*) FILTER (WHERE status='qualified')::int AS qualified,COUNT(*) FILTER (WHERE status='pending')::int AS pending,COUNT(DISTINCT referrer_user_id)::int AS referrers FROM public.ebnimaam_referrals")
+      loyaltyPool.query("SELECT COUNT(*) FILTER (WHERE status='qualified')::int AS qualified,COUNT(*) FILTER (WHERE status='pending')::int AS pending,COUNT(DISTINCT referrer_user_id)::int AS referrers FROM public.ebnimaam_referrals"),
+      loyaltyPool.query("SELECT c.code,c.discount_type,c.discount_value,c.minimum_subtotal_kobo,c.max_redemptions,c.per_user_limit,c.starts_at,c.ends_at,c.is_active,COUNT(r.id) FILTER (WHERE r.status='paid')::int AS paid_redemptions,COUNT(r.id) FILTER (WHERE r.status='pending')::int AS pending_redemptions FROM public.ebnimaam_coupons c LEFT JOIN public.ebnimaam_coupon_redemptions r ON r.code=c.code GROUP BY c.code ORDER BY c.created_at DESC LIMIT 100")
     ]);
     const bankRequests = requests.rows.map((row: any) => ({
       id: row.id, user_id: row.user_id, amount_kobo: Number(row.amount_kobo),
@@ -28,7 +29,8 @@ export async function GET(req: Request) {
       settings: settings.rows[0] || {},
       bank_refund_requests: bankRequests,
       challenge_submissions: submissions.rows,
-      referrals: referralStats.rows[0] || { qualified: 0, pending: 0, referrers: 0 }
+      referrals: referralStats.rows[0] || { qualified: 0, pending: 0, referrers: 0 },
+      coupons: coupons.rows
     }, { headers: { 'cache-control': 'no-store' } });
   } catch {
     return responseError('Ebnimaam loyalty admin data is unavailable.', 503);
@@ -79,6 +81,32 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ ok: true, message: decision === 'paid' ? 'Request marked paid. Confirm that the bank transfer was completed outside Ebnimaam before using this action.' : 'Request rejected. The reserved balance is available again.' });
     }
 
+
+    if (action === 'save_coupon') {
+      const code = String(body.code || '').trim().toUpperCase();
+      if (code.length < 4 || code.length > 24 || !/^[A-Z0-9_-]+$/.test(code)) return responseError('Coupon code must contain 4–24 letters, numbers, hyphens or underscores.');
+      const type = String(body.discount_type || '');
+      if (!['percent','fixed'].includes(type)) return responseError('Choose a percentage or fixed-naira discount.');
+      const valueInput = Number(body.discount_value);
+      if (!Number.isSafeInteger(valueInput) || valueInput < 1 || valueInput > (type === 'percent' ? 100 : 10000000)) return responseError(type === 'percent' ? 'Percentage must be from 1 to 100.' : 'Fixed discount must be a whole-naira amount up to 10,000,000.');
+      const minimum = Number(body.minimum_subtotal_naira || 0);
+      const maximum = Number(body.max_redemptions || 0);
+      const perUser = Number(body.per_user_limit || 1);
+      if (!Number.isSafeInteger(minimum) || minimum < 0 || minimum > 10000000 || !Number.isSafeInteger(maximum) || maximum < 0 || maximum > 1000000 || !Number.isInteger(perUser) || perUser < 1 || perUser > 100) return responseError('Check the minimum order, redemption limit and per-customer limit.');
+      const startsAt = body.starts_at ? new Date(String(body.starts_at)) : null;
+      const endsAt = body.ends_at ? new Date(String(body.ends_at)) : null;
+      if ((startsAt && !Number.isFinite(startsAt.getTime())) || (endsAt && !Number.isFinite(endsAt.getTime())) || (startsAt && endsAt && startsAt >= endsAt)) return responseError('Coupon start and expiry dates are invalid.');
+      const discountValue = type === 'fixed' ? valueInput * 100 : valueInput;
+      await loyaltyPool.query("INSERT INTO public.ebnimaam_coupons(code,discount_type,discount_value,minimum_subtotal_kobo,max_redemptions,per_user_limit,starts_at,ends_at,is_active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(code) DO UPDATE SET discount_type=EXCLUDED.discount_type,discount_value=EXCLUDED.discount_value,minimum_subtotal_kobo=EXCLUDED.minimum_subtotal_kobo,max_redemptions=EXCLUDED.max_redemptions,per_user_limit=EXCLUDED.per_user_limit,starts_at=EXCLUDED.starts_at,ends_at=EXCLUDED.ends_at,is_active=EXCLUDED.is_active,updated_at=NOW()", [code,type,discountValue,minimum*100,maximum || null,perUser,startsAt,endsAt,body.is_active!==false]);
+      return NextResponse.json({ ok: true, message: 'Coupon saved. Checkout will validate it on the server.' });
+    }
+    if (action === 'deactivate_coupon') {
+      const code = String(body.code || '').trim().toUpperCase();
+      if (!code) return responseError('Coupon code is required.');
+      const result = await loyaltyPool.query('UPDATE public.ebnimaam_coupons SET is_active=FALSE,updated_at=NOW() WHERE code=$1 RETURNING code',[code]);
+      if (!result.rowCount) return responseError('Coupon was not found.',404);
+      return NextResponse.json({ok:true,message:'Coupon deactivated. Paid and pending reservations were kept unchanged.'});
+    }
     if (action === 'issue_refund_credit') {
       const reference = String(body.reference || '').trim().slice(0, 160);
       const amountNaira = Number(body.amount_naira);

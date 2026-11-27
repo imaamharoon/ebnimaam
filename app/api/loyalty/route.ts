@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
-import { checkRateLimit } from '../../../../lib/rate-limit';
-import { loyaltyPool, ensureLoyaltyTables, ensureReferralCode, getVerifiedCustomer, encryptPrivateDetails, challengeDefinition } from '../../../../lib/loyalty';
+import { checkRateLimit } from '../../../lib/rate-limit';
+import { loyaltyPool, ensureLoyaltyTables, ensureReferralCode, getVerifiedCustomer, encryptPrivateDetails, challengeDefinition } from '../../../lib/loyalty';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

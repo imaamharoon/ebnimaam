@@ -53,13 +53,13 @@ export async function verifyAndReconcilePaystack(
   try {
     await client.query('BEGIN');
     const locked = await client.query(
-      `SELECT reference,amount_kobo,status,fulfilment_status,items,provider_transaction_id,currency
+      `SELECT reference,amount_kobo,COALESCE(paystack_amount_kobo,amount_kobo) AS paystack_amount_kobo,wallet_amount_kobo,status,fulfilment_status,items,provider_transaction_id,currency
        FROM public.ebnimaam_orders WHERE reference=$1 FOR UPDATE`,
       [reference],
     );
     if (!locked.rowCount) throw new Error('The order reference was not found.');
     const order = locked.rows[0];
-    if (Number(order.amount_kobo) !== amountKobo || order.currency !== 'NGN') {
+    if (Number(order.paystack_amount_kobo ?? order.amount_kobo) !== amountKobo || order.currency !== 'NGN') {
       throw new Error('The amount or currency received does not match this order.');
     }
     if (order.provider_transaction_id && Number(order.provider_transaction_id) !== transactionId) {
@@ -85,6 +85,10 @@ export async function verifyAndReconcilePaystack(
          VALUES($1,$2,$3,$4,$5::jsonb,NOW()) ON CONFLICT(provider_event_id) DO NOTHING`,
         [reference,eventId,transactionId,eventName,JSON.stringify(safeEvent)],
       );
+      if (terminalFailureStatuses.has(transactionStatus)) {
+        await client.query("UPDATE public.ebnimaam_wallet_ledger SET status='rejected',updated_at=NOW() WHERE source_key=$1 AND status='pending'", ['wallet-checkout:' + reference]);
+        await client.query("UPDATE public.ebnimaam_coupon_redemptions SET status='released',updated_at=NOW() WHERE reference=$1 AND status='pending'", [reference]);
+      }
       await client.query('COMMIT');
       if (terminalFailureStatuses.has(transactionStatus) && order.status !== 'paid') {
         await sendOrderStatusEmail(reference, 'payment_failed', process.env.NEXT_PUBLIC_SITE_URL || 'https://ebnimaam.vercel.app')
@@ -226,6 +230,8 @@ export async function verifyAndReconcilePaystack(
        VALUES($1,$2,$3,$4,$5::jsonb,NOW()) ON CONFLICT(provider_event_id) DO NOTHING`,
       [reference,eventId,transactionId,eventName,JSON.stringify(safeEvent)],
     );
+    await client.query("UPDATE public.ebnimaam_wallet_ledger SET status='completed',updated_at=NOW() WHERE source_key=$1 AND status='pending'", ['wallet-checkout:' + reference]);
+    await client.query("UPDATE public.ebnimaam_coupon_redemptions SET status='paid',updated_at=NOW() WHERE reference=$1 AND status='pending'", [reference]);
     await client.query('COMMIT');
     await processPaidReferralOrder(reference).catch((error) => console.warn('Referral reward reconciliation failed:', error));
     if (!alreadyProcessed) {
