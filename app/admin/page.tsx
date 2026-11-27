@@ -125,7 +125,7 @@ export default function Admin(){
  <label>Update status<select value={ticket.status} onChange={async e=>{try{await updateSupportTicket(ticket.id,{status:e.target.value});setErr('Support ticket status updated.')}catch(error:any){setErr(error.message)}}}>
   {['open','waiting_support','waiting_customer','resolved'].map(status=><option key={status} value={status}>{status.replace(/_/g,' ')}</option>)}
  </select></label>
- <form className="editform" onSubmit={async e=>{e.preventDefault();try{await updateSupportTicket(ticket.id,{reply:supportReplyDrafts[ticket.id]||''});setSupportReplyDrafts(prev=>({...prev,[ticket.id]:''}));setErr('Reply sent to the customer's support history.')}catch(error:any){setErr(error.message)}}}>
+ <form className="editform" onSubmit={async e=>{e.preventDefault();try{await updateSupportTicket(ticket.id,{reply:supportReplyDrafts[ticket.id]||''});setSupportReplyDrafts(prev=>({...prev,[ticket.id]:''}));setErr("Reply sent to the customer support history.")}catch(error:any){setErr(error.message)}}}>
   <label>Reply to customer<textarea rows={3} minLength={3} maxLength={3000} required value={supportReplyDrafts[ticket.id]||''} onChange={e=>setSupportReplyDrafts(prev=>({...prev,[ticket.id]:e.target.value}))}/></label>
   <button>Send reply</button>
  </form>
