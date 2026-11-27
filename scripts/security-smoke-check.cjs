@@ -12,6 +12,10 @@ const paymentVerification = fs.readFileSync('app/api/verify-payment/route.ts', '
 const reviewRoute = fs.readFileSync('app/api/product-reviews/route.ts', 'utf8');
 const paymentInitialization = fs.readFileSync('app/api/create-payment/route.ts', 'utf8');
 const aiSupport = fs.readFileSync('app/api/chat/route.ts', 'utf8');
+const serviceWorker = fs.readFileSync('public/service-worker.js', 'utf8');
+const offlinePage = fs.readFileSync('public/offline.html', 'utf8');
+const storeSettings = fs.readFileSync('app/api/store-settings/route.ts', 'utf8');
+const adminSettings = fs.readFileSync('app/admin/page.tsx', 'utf8');
 
 assert.ok(config.includes("key: 'X-Content-Type-Options'") && config.includes("value: 'nosniff'"));
 assert.ok(config.includes("key: 'X-Frame-Options'") && config.includes("value: 'SAMEORIGIN'"));
@@ -26,6 +30,20 @@ assert.ok(paymentInitialization.includes("verificationRequired: !definitiveFailu
 assert.ok(!aiSupport.includes('1–3 working days'));
 assert.ok(!aiSupport.includes('2–5 working days'));
 assert.ok(aiSupport.includes("pickupAddress:storeSettings.pickupAddress||''"));
+assert.ok(!paymentInitialization.includes('fallbackDelivery'));
+assert.ok(paymentInitialization.includes('configuredDeliveryFee === undefined'));
+assert.ok(storeSettings.includes("deliveryFeesByState:{}"));
+assert.ok(!storeSettings.includes('defaultFees'));
+assert.ok(!storeSettings.includes('Terminus Main Market'));
+assert.ok(adminSettings.includes("pickupAddress:''"));
+assert.ok(adminSettings.includes("placeholder=\"Not configured\""));
+assert.ok(serviceWorker.includes("const CACHE_PREFIX = 'ebnimaam-shell-'"));
+assert.ok(serviceWorker.includes("key.startsWith(CACHE_PREFIX)"));
+assert.ok(serviceWorker.includes("url.pathname.startsWith('/api/')"));
+assert.ok(serviceWorker.includes("url.pathname === '/store.html'"));
+assert.ok(serviceWorker.includes("url.pathname.startsWith('/assets/')"));
+assert.ok(offlinePage.includes("You're offline"));
+assert.ok(offlinePage.includes('live prices, stock, account details, orders and checkout need an internet connection'));
 assert.ok(storefront.includes('id="accountFrame"'));
 assert.ok(storefront.includes("frame.src='/account.html?embedded=1'"));
 
