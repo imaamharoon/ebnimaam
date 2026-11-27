@@ -25,10 +25,10 @@ const STORE_INSTRUCTIONS = [
 function quickReply(question: string) {
   const q = question.toLowerCase();
   if (/(size|fit|measure|sizing|small|large|chest)/.test(q)) {
-    return 'Regular fit is generally true to size. For a looser look, consider sizing up, or open the Size Guide & Fit Finder on the product page to compare your height, weight and fit preference.';
+    return 'Sizing and fit vary by product. Open that product’s Size Guide & Fit Finder and compare the displayed measurements. Contact Ebnimaam if the guide is missing.';
   }
   if (/(deliver|shipping|dispatch|arrive|how long|when.*come)/.test(q)) {
-    return 'We deliver across Nigeria. Typical delivery is 1–3 working days in Jos, Abuja and Kano, and 2–5 working days to Lagos and other states. Your delivery fee is shown at checkout before you pay.';
+    return 'Your delivery fee is shown at checkout. An arrival date can only be confirmed from the store’s configured delivery information or a recorded courier update in your order tracking.';
   }
   if (/(pay|payment|card|bank|ussd|transfer)/.test(q)) {
     return 'Checkout is handled securely by Paystack. You can pay by card, bank transfer or USSD, and your order is confirmed after the payment is verified.';
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
     const challengesContext=(challengeResult.rows||[]).map((item:any)=>({title:String(item.title),description:String(item.description||'').slice(0,700),durationDays:Number(item.duration_days),rewardNaira:Number(item.reward_kobo)/100,maxTeamSize:Number(item.max_team_size),milestones:Array.isArray(item.milestones)?item.milestones:[]}));
     const liveContext = [
       'LIVE EBNIMAAM WEBSITE CONTEXT (use only these facts; if missing say you cannot verify):',
-      JSON.stringify({storeName:'Ebnimaam',country:'Nigeria',pickupAddress:storeSettings.pickupAddress||'Terminus Main Market, near the bus stop',
+      JSON.stringify({storeName:'Ebnimaam',country:'Nigeria',pickupAddress:storeSettings.pickupAddress||'',
         pickupHours:storeSettings.pickupHours||'',supportEmail:storeSettings.supportEmail||'ebnimaam.com@gmail.com',
         supportPhone:storeSettings.supportPhone||'08145672755',deliveryFeesByState:storeSettings.deliveryFeesByState||{},
         deliveryRules:storeSettings.deliveryRules||'',returnsPolicy:storeSettings.returnsPolicy||'',shippingPolicy:storeSettings.shippingPolicy||'',
