@@ -84,16 +84,23 @@ The owner manages order progress in Admin → Orders:
 - Fulfilment cannot move into preparation/dispatch/collection before Paystack payment is verified.
 - Delivery tracking partner, reference and HTTPS courier URL can be saved on each delivery order. The customer tracking page also shows the store's progress timeline and refreshes automatically while opened.
 
-Customer order emails are sent for initial pending status, successful payment/processing, payment failure, picked items, dispatch, delivery, ready for pickup, collection and cancellation. A private HMAC-signed tracking link is included in each email; it expires after 90 days. Notification events are logged and de-duplicated so repeated admin saves do not repeatedly email customers. Admin can inspect notification delivery history and retry the current status notification.
+Customer order emails are triggered for initial pending status, successful payment/processing, payment failure, picked items, dispatch, delivery, ready for pickup, collection and cancellation. Each message links to the sign-in-required order page; private order details are only shown after the customer's verified account and active device-bound session are checked. Notification events are logged and de-duplicated so repeated admin saves do not repeatedly email customers. Admin can inspect provider-acceptance history and retry a failed/current-status notification. A provider-accepted message is not proof of inbox delivery.
 
-### Transactional email provider (free option)
+### Transactional email provider
 
-Order-notification email supports Brevo's free transactional API and Resend. Brevo is preferred when `BREVO_API_KEY` is present; Resend remains the fallback. Brevo advertises up to 300 emails/day on its free plan, but account and sender verification are required. Configure in Vercel:
-- `BREVO_API_KEY` — Brevo API key (recommended free tier).
-- `EMAIL_FROM` — sender identity approved/verified by Brevo (format: `Ebnimaam <sender@example.com>`).
-- `AUTH_SECRET` — required for signed tracking links.
+Resend is the primary provider for customer order and security notifications. Brevo is an optional API fallback when Resend is not configured. The app sends through HTTPS APIs; it does not use Gmail SMTP or store mail passwords.
 
-If Brevo is not configured, `RESEND_API_KEY` is used as a fallback. These variables must be configured in Vercel; do not put secrets in GitHub, source code, browser code or chat. Email events remain not_configured until the provider, sender and tracking secret are available. Verify sender identity and test a message to the owner's inbox before relying on customer notifications. Account verification/OTP email is separate and still depends on the Neon Auth SMTP setup.
+Configure these encrypted environment variables in the canonical Vercel project for Production (and Preview only when the preview is isolated):
+- `RESEND_API_KEY` — a Resend API key with permission to send mail.
+- `EMAIL_FROM` — a sender address on a domain verified in Resend, for example `Ebnimaam <orders@your-verified-domain>`.
+- `AUTH_SECRET` — a long, random server-only secret used for signed security tokens and private order-tracking functions.
+- `BREVO_API_KEY` — optional; used only when `RESEND_API_KEY` is absent.
+
+Keep API keys and secrets out of GitHub, source code, browser code and chat. Do not use a Gmail account password or app password as the mail-provider credential. Confirm the Resend domain's DNS verification (including SPF/DKIM), then send a controlled test to the store owner's inbox and confirm it appears in the provider's message logs. The email notification event log records provider acceptance; it does not prove inbox delivery.
+
+Customer registration OTP, email verification and password-reset messages are sent by Neon Managed Auth, not by the order-notification API. Configure Neon Auth's custom SMTP settings separately with Resend's SMTP endpoint: host `smtp.resend.com`, port `465` (SSL) or `587` (STARTTLS), username `resend`, and the Resend API key as the password. Use a sender address verified in Resend. Test signup OTP, resend-code and password-reset flows separately; do not change the existing signup/session code as part of mail-provider setup.
+
+The customer authentication proxy calls `activateCustomerSession()` after verified sign-in and email verification. That records first sign-ins/new devices and sends a Resend security alert when `RESEND_API_KEY` and `EMAIL_FROM` are configured; the security-event table records provider acceptance, not inbox delivery.
 
 The internal tracking page shows database status history and checks for updates every 30 seconds while the private link is open. Customers can also use the existing order-reference plus checkout-email lookup as a fallback. It is not a courier GPS feed. For map-based live location, a delivery partner API or rider location integration is required; a secure courier tracking URL can be saved per order in Admin.
 
@@ -120,7 +127,7 @@ The admin dashboard refreshes order and inventory data periodically and shows ac
 ## Account security and private order access
 
 - Customer accounts use one active Ebnimaam app session per account. A sign-in from a second device replaces the previous app session, and a browser/app installation cannot keep two customer accounts active at once.
-- New devices are recorded and trigger a security email to the verified account address when the Resend sender configuration is present. Configure `RESEND_API_KEY` and `EMAIL_FROM` in Vercel with a verified sender domain before relying on email alerts.
+- First sign-ins and newly recognised devices are recorded and trigger a Resend security alert to the verified account email. The security-event log records whether Resend accepted the alert; it requires `RESEND_API_KEY` and `EMAIL_FROM` and does not by itself confirm inbox delivery.
 - Checkout, customer profile reads/updates, payment-return verification, saved reviews and order tracking check the active device-bound customer session. An order reference or email address alone cannot reveal private order details.
 - The storefront includes a refresh control, mobile history-aware account/cart/checkout overlays and the owner-provided WhatsApp Channel follow link. Additional social handles are managed in Admin → Store settings.
 

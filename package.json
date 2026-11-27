@@ -13,8 +13,7 @@
     "next": "15.5.29",
     "pg": "^8.13.1",
     "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "nodemailer": "^6.9.16"
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
     "typescript": "^5.5.4",
