@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     }
 
     const result = await pool.query(
-      'SELECT o.reference,o.customer_email,o.amount_kobo,o.currency,o.status,o.fulfilment_status,o.created_at,o.paid_at,o.address,s.settings,COALESCE((SELECT json_agg(json_build_object(''status'',h.status,''note'',h.note,''created_at'',h.created_at) ORDER BY h.created_at ASC) FROM public.ebnimaam_order_status_history h WHERE h.reference=o.reference),''[]''::json) AS history FROM public.ebnimaam_orders o LEFT JOIN public.ebnimaam_store_settings s ON s.id=1 WHERE o.reference=$1 AND ($2::text IS NULL OR LOWER(o.customer_email)=LOWER($2))',
+      "SELECT o.reference,o.customer_email,o.amount_kobo,o.currency,o.status,o.fulfilment_status,o.created_at,o.paid_at,o.address,s.settings,COALESCE((SELECT json_agg(json_build_object('status',h.status,'note',h.note,'created_at',h.created_at) ORDER BY h.created_at ASC) FROM public.ebnimaam_order_status_history h WHERE h.reference=o.reference),'[]'::json) AS history FROM public.ebnimaam_orders o LEFT JOIN public.ebnimaam_store_settings s ON s.id=1 WHERE o.reference=$1 AND ($2::text IS NULL OR LOWER(o.customer_email)=LOWER($2))",
       [reference, tokenReference ? null : email],
     );
     if (!result.rowCount) return NextResponse.json({ error: 'Order not found.' }, { status: 404 });
