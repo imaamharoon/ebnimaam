@@ -355,12 +355,8 @@
     const state=$("buyerState").value;
     if(!state){$("checkoutEstimate").textContent="Select your state to estimate delivery.";return}
     const configuredFee=deliveryFees[state]??deliveryFees.default;
-    if(configuredFee===undefined||configuredFee===null||configuredFee===''){
-      $("checkoutEstimate").textContent="Delivery pricing for this state has not been configured. Please contact Ebnimaam before checkout.";
-      return;
-    }
     const amount=Number(configuredFee);
-    if(!Number.isSafeInteger(amount)||amount<0||amount>50000){
+    if(configuredFee===undefined||configuredFee===null||configuredFee===''||!Number.isSafeInteger(amount)||amount<0||amount>50000){
       $("checkoutEstimate").textContent="The delivery fee for this state needs to be checked by Ebnimaam before checkout.";
       return;
     }
