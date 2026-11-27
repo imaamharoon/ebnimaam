@@ -37,6 +37,7 @@ function money(value: number) {
 export default function Track() {
   const [ref, setRef] = useState('');
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [autoTrack, setAutoTrack] = useState(false);
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -69,7 +70,7 @@ export default function Track() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const savedReference = params.get('reference') || '';
-    if (savedReference) setRef(savedReference);
+    if (savedReference) { setRef(savedReference); setAutoTrack(true); }
     let active = true;
     const checkSession = async () => {
       try {
@@ -86,8 +87,8 @@ export default function Track() {
   }, []);
 
   useEffect(() => {
-    if (signedIn === true && ref.trim()) void refresh(false);
-  }, [signedIn, ref, refresh]);
+    if (signedIn === true && autoTrack && ref.trim()) { setAutoTrack(false); void refresh(false); }
+  }, [signedIn, autoTrack, ref, refresh]);
 
   useEffect(() => {
     if (signedIn !== true || !order?.reference) return;
