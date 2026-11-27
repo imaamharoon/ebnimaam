@@ -52,7 +52,7 @@ function makePuzzle() {
     const offset = offsets[randomInt(0, offsets.length)];
     choices.add(Math.max(1, answer + (randomInt(0, 2) ? offset : -offset)));
   }
-  const options = [...choices];
+  const options = Array.from(choices);
   for (let index = options.length - 1; index > 0; index -= 1) {
     const swap = randomInt(0, index + 1);
     [options[index], options[swap]] = [options[swap], options[index]];
