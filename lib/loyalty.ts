@@ -56,12 +56,17 @@ export async function ensureLoyaltySchema(pool: Pool | PoolClient) {
   await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_loyalty_settings(
     id SMALLINT PRIMARY KEY DEFAULT 1 CHECK(id=1),
     referred_reward_kobo INTEGER NOT NULL DEFAULT 0 CHECK(referred_reward_kobo>=0),
-    referrer_reward_kobo INTEGER NOT NULL DEFAULT 0 CHECK(referrer_reward_kobo>=0),
+    referrer_reward_kobo INTEGER NOT NULL DEFAULT 20000 CHECK(referrer_reward_kobo>=0),
+    game_reward_kobo INTEGER NOT NULL DEFAULT 5000 CHECK(game_reward_kobo>=0),
     referral_threshold INTEGER NOT NULL DEFAULT 5 CHECK(referral_threshold=5),
+    referral_rules_version SMALLINT NOT NULL DEFAULT 1,
     low_stock_threshold INTEGER NOT NULL DEFAULT 3 CHECK(low_stock_threshold>=0),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  await pool.query('ALTER TABLE public.ebnimaam_loyalty_settings ADD COLUMN IF NOT EXISTS game_reward_kobo INTEGER NOT NULL DEFAULT 5000 CHECK(game_reward_kobo>=0)');
+  await pool.query('ALTER TABLE public.ebnimaam_loyalty_settings ADD COLUMN IF NOT EXISTS referral_rules_version SMALLINT NOT NULL DEFAULT 0');
   await pool.query('INSERT INTO public.ebnimaam_loyalty_settings(id) VALUES(1) ON CONFLICT(id) DO NOTHING');
+  await pool.query('UPDATE public.ebnimaam_loyalty_settings SET referred_reward_kobo=0,referrer_reward_kobo=20000,referral_threshold=5,referral_rules_version=1,updated_at=NOW() WHERE id=1 AND referral_rules_version<1');
   await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_customer_profiles(user_id TEXT PRIMARY KEY,email TEXT NOT NULL,full_name TEXT,phone TEXT,addresses JSONB NOT NULL DEFAULT '[]'::jsonb,preferences JSONB NOT NULL DEFAULT '{}'::jsonb,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
   await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_wallet_ledger(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -216,14 +221,13 @@ export async function awardPaidReferral(client: PoolClient, order: { reference: 
     'SELECT COUNT(*)::int AS count FROM public.ebnimaam_referral_invites WHERE referrer_user_id=$1 AND qualifying_order_reference IS NOT NULL',
     [invite.referrer_user_id],
   );
-  const threshold = 5;
   const referrerReward = Number(config.referrer_reward_kobo || 0);
-  if (Number(qualified.rows[0]?.count || 0) >= threshold && referrerReward > 0) {
+  if (referrerReward > 0) {
     await addWalletEntry(client,{
-      userId:invite.referrer_user_id,entryType:'referral_milestone',direction:'credit',
-      amountKobo:referrerReward,reference:'referral-five-paid-'+invite.referrer_user_id,
-      description:'Reward for five referred customers with verified paid orders',
-      metadata:{qualifyingReferralCount:Number(qualified.rows[0]?.count || 0)},
+      userId:invite.referrer_user_id,entryType:'referral_reward',direction:'credit',
+      amountKobo:referrerReward,reference:'referral-paid-'+invite.id,
+      description:'Reward for a referred customer completing a verified paid purchase',
+      metadata:{referredUserId:invite.referred_user_id,qualifyingOrderReference:qualifyingReference,qualifiedReferralCount:Number(qualified.rows[0]?.count || 0),threshold:5},
     });
   }
 }

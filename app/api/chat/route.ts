@@ -17,7 +17,8 @@ const STORE_INSTRUCTIONS = [
   'The assistant is read-only. It cannot change an order, initiate or approve a refund, change a wallet balance, approve a challenge, issue a coupon or edit store settings. Direct customers to the relevant account page or human support for actions requiring authorization.',
   'Payments use Paystack. Never ask the customer to send money to a personal account. Never claim a payment is complete until Paystack verification confirms it.',
   'Refunds credited to the Ebnimaam balance remain there until the customer requests a bank refund; bank transfer requests require admin processing. Do not promise an instant bank payout.',
-  'Referral milestone reward requires five different referred customers to complete verified paid orders. Team challenge rewards require every member to complete all milestones and admin approval.',
+  'Referral rewards are earned at ₦200 for each different referred customer who completes a verified first paid order, up to ₦1,000 after five. Referral and game rewards are store-only wallet credit: they cannot be transferred or withdrawn. Daily Pattern Challenge rewards are credited only after the server verifies a correct answer and only once per day.',
+  'Team challenge rewards require every member to complete all milestones and admin approval.',
   'Camera and microphone are only used after a customer taps the photo-search or voice-search controls. Do not imply that the site continuously records or monitors the user. Calendar reminders are exported by user action and do not read a private calendar.',
   'WhatsApp is a customer-initiated contact link only. Do not claim the site sends automated WhatsApp messages.',
 ].join('\\n');
@@ -56,9 +57,9 @@ export async function POST(req: Request) {
     if (!Array.isArray(body?.messages) || body.messages.length === 0) {
       return NextResponse.json({ error: 'Messages are required.' }, { status: 400 });
     }
-    const messages = body.messages.slice(-6).map((item: any) => ({
+    const messages = body.messages.slice(-10).map((item: any) => ({
       role: item?.role === 'assistant' ? 'model' : 'user',
-      text: String(item?.text || '').trim().slice(0, 600),
+      text: String(item?.text || '').trim().slice(0, 1000),
     })).filter((item: any) => item.text);
     if (!messages.length || messages[messages.length - 1].role !== 'user') {
       return NextResponse.json({ error: 'Please send a message to continue.' }, { status: 400 });
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
     await ensureLoyaltySchema(pool).catch(() => {});
     await ensureCouponsSchema(pool).catch(() => {});
     await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_news(id TEXT PRIMARY KEY,title TEXT NOT NULL,content TEXT NOT NULL,image TEXT NOT NULL DEFAULT '',published BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`).catch(() => {});
-    const [catalogueResult, settingsResult, ownOrdersResult, newsResult, walletResult, couponResult, challengeResult] = await Promise.all([
+    const [catalogueResult, settingsResult, ownOrdersResult, newsResult, walletResult, couponResult, challengeResult, referralResult, loyaltySettingsResult] = await Promise.all([
       pool.query("SELECT id,name,category,price,description,stock,sizes,tag FROM public.ebnimaam_products WHERE is_active=TRUE AND stock>0 ORDER BY updated_at DESC LIMIT 80").catch(() => ({ rows: [] as any[] })),
       pool.query("SELECT settings FROM public.ebnimaam_store_settings WHERE id=1").catch(() => ({ rows: [] as any[] })),
       user ? pool.query("SELECT reference,status,fulfilment_status,COALESCE(order_total_kobo,amount_kobo) AS order_total_kobo,created_at FROM public.ebnimaam_orders WHERE auth_user_id=$1 ORDER BY created_at DESC LIMIT 8",[user.id]).catch(() => ({ rows: [] as any[] })) : Promise.resolve({ rows: [] as any[] }),
@@ -86,6 +87,8 @@ export async function POST(req: Request) {
         `SELECT title,description,duration_days,reward_kobo,max_team_size,milestones
          FROM public.ebnimaam_challenges WHERE active=TRUE ORDER BY created_at DESC LIMIT 12`
       ).catch(() => ({ rows: [] as any[] })),
+      user ? pool.query(`SELECT COUNT(*)::int AS total,COUNT(*) FILTER(WHERE qualifying_order_reference IS NOT NULL)::int AS qualified FROM public.ebnimaam_referral_invites WHERE referrer_user_id=$1`,[user.id]).catch(() => ({rows:[] as any[]})) : Promise.resolve({rows:[] as any[]}),
+      pool.query('SELECT referrer_reward_kobo,game_reward_kobo,referral_threshold FROM public.ebnimaam_loyalty_settings WHERE id=1').catch(() => ({rows:[] as any[]})),
     ]);
     const storeSettings = settingsResult.rows[0]?.settings || {};
     const catalogueContext = (catalogueResult.rows || []).map((p:any) => ({
@@ -109,7 +112,9 @@ export async function POST(req: Request) {
         publishedReturnsPolicySummary:'The published policy explains Nigerian consumer rights, assessment of returns in a reasonable time, remedies for faulty, damaged, incomplete or incorrect goods, and manual refund processing. It does not set an arbitrary seven-day deadline that removes statutory rights.',
         publishedPrivacySummary:'The published Privacy Policy explains data use, rights requests, account information, safeguards and contact details. Do not make up retention periods or data-sharing practices.',
         publishedTermsSummary:'The published Terms cover Nigeria-only orders, Paystack, delivery fees shown at checkout, fulfilment, account requirements, customer conduct and contact information.',
-        signedInCustomer: user?{email:user.email,availableWalletKobo:walletResult,ownRecentOrders:orderContext}:null},null,2),
+        signedInCustomer: user?{email:user.email,availableWalletKobo:walletResult,ownRecentOrders:orderContext,referralProgress:referralResult.rows[0]||{total:0,qualified:0}}:null,
+        referralProgram:{requiredPurchases:Number(loyaltySettingsResult.rows[0]?.referral_threshold||5),creditPerVerifiedReferralNaira:Number(loyaltySettingsResult.rows[0]?.referrer_reward_kobo||20000)/100,totalAfterFiveNaira:(Number(loyaltySettingsResult.rows[0]?.referrer_reward_kobo||20000)/100)*5,storeOnly:true},
+        dailyPatternChallenge:{rewardNaira:Number(loyaltySettingsResult.rows[0]?.game_reward_kobo||5000)/100,rewardLimit:'one successful reward per customer per Africa/Lagos calendar day',cashWithdrawalAllowed:false}},null,2),
       'For wallet ledger, referral status and team challenge participation details, ask the signed-in customer to open /rewards.html. The supplied wallet figure is available credit only; never infer rewards from orders.',
     ].join('\\n');
     if (!apiKey) {
@@ -126,17 +131,17 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: STORE_INSTRUCTIONS + '\\n\\n' + liveContext }] },
         contents,
-        generationConfig: { maxOutputTokens: 420 },
+        generationConfig: { maxOutputTokens: 900 },
       }),
       cache: 'no-store',
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(20000),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       return NextResponse.json({ reply: quickReply(messages[messages.length - 1].text), mode: 'quick-help' });
     }
     const reply = String(data?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-    return NextResponse.json({ reply: reply.slice(0, 1200) || quickReply(messages[messages.length - 1].text), mode: 'gemini' });
+    return NextResponse.json({ reply: reply.slice(0, 2400) || quickReply(messages[messages.length - 1].text), mode: 'gemini' });
   } catch {
     return NextResponse.json({ error: 'Network error reaching support. Please use WhatsApp.' }, { status: 503 });
   }

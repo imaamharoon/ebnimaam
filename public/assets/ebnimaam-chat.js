@@ -16,14 +16,14 @@ function boot(){
  open.addEventListener("click",show);close.addEventListener("click",hide);
  document.addEventListener("keydown",function(event){if(event.key==="Escape"&&box.classList.contains("open"))hide()});
  async function ask(value){
-  var clean=String(value||"").trim().slice(0,500);if(!clean||send.disabled)return;
-  append("user",clean);history.push({role:"user",text:clean});history=history.slice(-6);input.value="";send.disabled=true;
+  var clean=String(value||"").trim().slice(0,1000);if(!clean||send.disabled)return;
+  append("user",clean);history.push({role:"user",text:clean});history=history.slice(-10);input.value="";send.disabled=true;
   var pending=append("assistant","One moment…");
   try{
    var response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:history})});
    var data=await response.json();if(!response.ok)throw new Error(data.error||"Support is temporarily unavailable.");
-   pending.textContent=data.reply||"Please use WhatsApp below for help from the team.";history.push({role:"assistant",text:pending.textContent});history=history.slice(-6);
-   var status=box.querySelector("#ebChatStatus");if(data.mode==="quick-help")status.textContent="Instant store answers · Detailed AI chat is being connected.";else status.textContent="Ebnimaam support assistant";
+   pending.textContent=data.reply||"Please use WhatsApp below for help from the team.";history.push({role:"assistant",text:pending.textContent});history=history.slice(-10);
+   var status=box.querySelector("#ebChatStatus");if(data.mode==="quick-help")status.textContent="Instant store guidance · Some detailed AI answers may be limited right now.";else status.textContent="Ebnimaam support assistant";
   }catch(error){pending.textContent="I couldn't reach support just now. Please use WhatsApp below to speak to the team."}
   finally{send.disabled=false;messages.scrollTop=messages.scrollHeight}
  }

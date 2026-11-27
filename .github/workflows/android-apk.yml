@@ -40,7 +40,7 @@ jobs:
       - name: Verify Next.js production build
         run: npm run build
       - name: Install Capacitor tooling and icon generator
-        run: npm install --no-save --package-lock=false @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/assets sharp
+        run: npm install --no-save --package-lock=false @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/status-bar@7 @capacitor/assets sharp
       - name: Prepare branded app icon from the supplied Ebnimaam logo
         run: |
           mkdir -p assets

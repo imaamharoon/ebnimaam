@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   try {
     await ensureLoyaltySchema(pool);
     const [settings, withdrawals, challenges, submissions, referrals, wallets] = await Promise.all([
-      pool.query('SELECT referred_reward_kobo,referrer_reward_kobo,referral_threshold,low_stock_threshold FROM public.ebnimaam_loyalty_settings WHERE id=1'),
+      pool.query('SELECT referred_reward_kobo,referrer_reward_kobo,game_reward_kobo,referral_threshold,low_stock_threshold FROM public.ebnimaam_loyalty_settings WHERE id=1'),
       pool.query(
         `SELECT w.id,w.user_id,w.amount_kobo,w.bank_details,w.status,w.admin_note,w.created_at,
                 p.email,p.full_name FROM public.ebnimaam_wallet_withdrawals w
@@ -46,7 +46,7 @@ export async function GET(req: Request) {
     ]);
     const safeWithdrawals=withdrawals.rows.map((row:any)=>({ ...row, bank_details:decryptBankDetails(row.bank_details?.encrypted) }));
     return NextResponse.json({
-      settings:settings.rows[0]||{referred_reward_kobo:0,referrer_reward_kobo:0,referral_threshold:5,low_stock_threshold:3},
+      settings:settings.rows[0]||{referred_reward_kobo:0,referrer_reward_kobo:20000,game_reward_kobo:5000,referral_threshold:5,low_stock_threshold:3},
       withdrawals:safeWithdrawals,challenges:challenges.rows,submissions:submissions.rows,referrals:referrals.rows,wallets:wallets.rows,
     },{headers:{'cache-control':'no-store'}});
   } catch {
@@ -61,13 +61,13 @@ export async function POST(req: Request) {
   try {
     await ensureLoyaltySchema(pool);
     if(action==='settings'){
-      const referred=Number(body.referredRewardNaira),referrer=Number(body.referrerRewardNaira);
-      if(!Number.isSafeInteger(referred)||referred<0||referred>100000||!Number.isSafeInteger(referrer)||referrer<0||referrer>100000)
-        return NextResponse.json({error:'Referral rewards must be whole naira amounts from ₦0 to ₦100,000.'},{status:400});
+      const referred=Number(body.referredRewardNaira),referrer=Number(body.referrerRewardNaira),gameReward=Number(body.gameRewardNaira);
+      if(!Number.isSafeInteger(referred)||referred<0||referred>100000||!Number.isSafeInteger(referrer)||referrer<0||referrer>100000||!Number.isSafeInteger(gameReward)||gameReward<0||gameReward>100000)
+        return NextResponse.json({error:'Referral and game rewards must be whole naira amounts from ₦0 to ₦100,000.'},{status:400});
       await pool.query(
-        `UPDATE public.ebnimaam_loyalty_settings SET referred_reward_kobo=$1,referrer_reward_kobo=$2,referral_threshold=5,updated_at=NOW() WHERE id=1`,
-        [referred*100,referrer*100]);
-      await recordAdminActivity('loyalty.settings.updated','loyalty_settings','1',{referredRewardNaira:referred,referrerRewardNaira:referrer,referralThreshold:5});
+        `UPDATE public.ebnimaam_loyalty_settings SET referred_reward_kobo=$1,referrer_reward_kobo=$2,game_reward_kobo=$3,referral_threshold=5,updated_at=NOW() WHERE id=1`,
+        [referred*100,referrer*100,gameReward*100]);
+      await recordAdminActivity('loyalty.settings.updated','loyalty_settings','1',{referredRewardNaira:referred,referrerRewardNaira:referrer,gameRewardNaira:gameReward,referralThreshold:5});
       return NextResponse.json({ok:true});
     }
     if(action==='credit-wallet'){
