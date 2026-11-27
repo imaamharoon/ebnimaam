@@ -37,7 +37,7 @@ function normalizeSocialLinks(input: unknown) {
 const defaultSettings = {
   storeName:'ebnimaam',country:'Nigeria',deliveryCountries:['Nigeria'],deliveryFeesByState:defaultFees,
   pickupAddress:'Terminus Main Market, near the bus stop',pickupHours:'',holidayExceptions:'',deliveryRules:'',
-  supportEmail:'ebnimaam.com@gmail.com',supportPhone:'08145672755',socialLinks:{},
+  supportEmail:'ebnimaam.com@gmail.com',supportPhone:'08145672755',lowStockThreshold:3,socialLinks:{},
   returnsPolicy:'',privacyPolicy:'',terms:'',shippingPolicy:'',promotions:[],
 };
 async function init() {
@@ -78,6 +78,8 @@ export async function PUT(req: Request) {
       }
       deliveryFeesByState[state] = value;
     }
+    const lowStockThreshold=Number(body.lowStockThreshold ?? defaultSettings.lowStockThreshold);
+    if(!Number.isSafeInteger(lowStockThreshold)||lowStockThreshold<0||lowStockThreshold>1000) return NextResponse.json({error:'Low-stock alert threshold must be a whole number from 0 to 1,000.'},{status:400});
     const socialLinks = normalizeSocialLinks(body.socialLinks);
     const allowed = {
       ...defaultSettings,
@@ -87,6 +89,7 @@ export async function PUT(req: Request) {
       country:'Nigeria',
       deliveryCountries:['Nigeria'],
       deliveryFeesByState,
+      lowStockThreshold,
       socialLinks,
     };
     await pool.query('UPDATE public.ebnimaam_store_settings SET settings=$1::jsonb,updated_at=NOW() WHERE id=1',[JSON.stringify(allowed)]);

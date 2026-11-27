@@ -17,6 +17,8 @@ export function isOrderEmailConfigured(): boolean {
 export async function ensureOrderEmailEventsTable(): Promise<void> {
   await pool.query("CREATE TABLE IF NOT EXISTS public.ebnimaam_order_email_events (event_key TEXT PRIMARY KEY, reference TEXT NOT NULL, status_key TEXT NOT NULL, recipient TEXT NOT NULL, delivery_status TEXT NOT NULL DEFAULT 'pending', provider_message_id TEXT, last_error TEXT, attempt_count INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), sent_at TIMESTAMPTZ)");
   await pool.query('CREATE INDEX IF NOT EXISTS ebnimaam_order_email_events_reference_idx ON public.ebnimaam_order_email_events(reference, created_at DESC)');
+  await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS order_total_kobo BIGINT');
+  await pool.query('UPDATE public.ebnimaam_orders SET order_total_kobo=amount_kobo WHERE order_total_kobo IS NULL');
 }
 export function createOrderTrackingToken(reference: string): string {
   const secret = process.env.AUTH_SECRET || '';
@@ -56,7 +58,7 @@ export async function sendOrderStatusEmail(reference: string, statusInput: strin
   const status = String(statusInput || '').toLowerCase();
   if (!reference || !validStatuses.has(status)) return { deliveryStatus:'skipped', reason:'Unsupported status.' };
   await ensureOrderEmailEventsTable();
-  const found = await pool.query('SELECT o.reference,o.customer_email,o.customer_name,o.amount_kobo,o.status AS payment_status,o.address,o.items,s.settings FROM public.ebnimaam_orders o LEFT JOIN public.ebnimaam_store_settings s ON s.id=1 WHERE o.reference=$1',[reference]);
+  const found = await pool.query('SELECT o.reference,o.customer_email,o.customer_name,COALESCE(o.order_total_kobo,o.amount_kobo) AS amount_kobo,o.amount_kobo AS paystack_amount_kobo,o.status AS payment_status,o.address,o.items,s.settings FROM public.ebnimaam_orders o LEFT JOIN public.ebnimaam_store_settings s ON s.id=1 WHERE o.reference=$1',[reference]);
   if (!found.rowCount) return { deliveryStatus:'failed', reason:'Order not found.' };
   const order = found.rows[0];
   const address = parseObject(order.address);

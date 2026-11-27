@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#102544">
+<title>Ebnimaam Rewards & Balance</title>
+<style>
+:root{--navy:#102544;--gold:#c99550;--cream:#faf8f2;--paper:#fffefa;--ink:#243141;--muted:#6c7683;--line:#e7e1d6}*{box-sizing:border-box}body{margin:0;background:var(--cream);color:var(--ink);font:14px/1.6 Arial,sans-serif}.top{background:var(--navy);color:white;padding:18px max(18px,calc((100vw - 1050px)/2));display:flex;align-items:center;justify-content:space-between;gap:12px}.top a{color:white}.wrap{max-width:1050px;margin:auto;padding:22px 16px 60px}h1,h2,h3{color:var(--navy)}h1{font-size:clamp(28px,5vw,40px);line-height:1.15;margin:6px 0}h2{margin:0 0 12px}h3{margin:0 0 8px}.muted{color:var(--muted);font-size:13px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:18px;margin:14px 0}.balance{background:var(--navy);color:#fff;border-radius:14px;padding:22px}.balance h2,.balance p{color:#fff}.amount{font-size:34px;font-weight:700;letter-spacing:-.04em}.pill{display:inline-block;padding:4px 9px;border-radius:999px;background:#f1eee7;color:var(--navy);font-size:11px}.field{display:grid;gap:5px;margin:12px 0}.field input,.field textarea,.field select{width:100%;border:1px solid var(--line);border-radius:8px;padding:12px;background:white;color:var(--ink);font:inherit}.btn{border:0;border-radius:8px;padding:11px 15px;background:var(--navy);color:white;font-weight:700;cursor:pointer}.btn.alt{background:white;color:var(--navy);border:1px solid var(--line)}.btn:disabled{opacity:.5}.notice{background:#f1eee7;border-radius:8px;padding:12px;margin:12px 0;white-space:pre-wrap}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.ledger{border-top:1px solid var(--line);padding:10px 0;display:flex;justify-content:space-between;gap:12px}.ledger:first-child{border-top:0}.credit{color:#16834f}.debit{color:#ad4c3f}.team{border:1px solid var(--line);border-radius:10px;padding:14px;margin:10px 0}.team h3{margin:0}.milestone{padding:10px 0;border-top:1px solid var(--line)}.milestone:first-child{border:0}.hidden{display:none!important}a{color:#936b38}@media(max-width:680px){.grid{grid-template-columns:1fr}.top{padding:14px 16px}.amount{font-size:29px}}
+</style>
+</head>
+<body>
+<header class="top"><b>ebnimaam · Rewards</b><span><a href="/store.html">Shop</a> · <a href="/account.html">Account</a></span></header>
+<main class="wrap">
+ <p class="muted">Your rewards, referral progress and team challenges in one place.</p>
+ <h1>Ebnimaam Balance</h1>
+ <div id="status" class="notice" role="status">Checking your account…</div>
+ <div id="rewardsApp" class="hidden">
+  <div class="grid">
+   <section class="balance"><p>Available Ebnimaam balance</p><div id="balance" class="amount">₦0</div><p id="reserved" class="muted">₦0 reserved for bank refund requests</p><p>Use available wallet credit at checkout, or request a bank refund.</p></section>
+   <section class="card"><h2>Referral rewards</h2><p>Invite five different people. Each must complete a real, verified paid order. Their reward is credited after their own first paid order; your referral milestone reward unlocks after all five purchases are verified.</p><div class="row"><span class="pill" id="referralProgress">0 / 5 paid referrals</span></div><div class="field"><label>Your referral code</label><input id="referralCode" readonly></div><div class="row"><button class="btn" id="copyReferral">Copy referral code</button><button class="btn alt" id="shareReferral">Share invite</button></div><div id="rewardAmounts" class="muted"></div><form id="claimReferral"><div class="field"><label>Have a friend's referral code?</label><input id="claimCode" maxlength="30" placeholder="Enter code before your first paid order"></div><button class="btn alt">Apply referral code</button></form></section>
+  </div>
+  <section class="card"><h2>Request a bank refund</h2><p class="muted">Any approved refund can be placed in your Ebnimaam balance. Ask for a bank transfer here; the amount stays reserved until an administrator confirms the manual bank transfer.</p>
+   <form id="bankRefund"><div class="grid"><div class="field"><label>Amount (₦)</label><input id="refundAmount" type="number" min="1" step="1" required></div><div class="field"><label>Bank name</label><input id="bankName" maxlength="80" required></div><div class="field"><label>Account name</label><input id="accountName" maxlength="100" required></div><div class="field"><label>10-digit account number</label><input id="accountNumber" inputmode="numeric" pattern="[0-9]{10}" maxlength="10" required></div></div><button class="btn">Request bank refund</button></form>
+   <div id="withdrawals"></div>
+  </section>
+  <section class="card"><h2>Team challenges</h2><p>Join a team challenge that lasts several days. Every member must complete each milestone and provide evidence. Rewards are credited only after admin verification. Challenges are designed to be demanding but fair, with clear rules and time limits.</p>
+   <div id="challenges"></div>
+   <form id="joinTeam"><h3>Join a team</h3><div class="field"><label>Team invite code</label><input id="teamInvite" maxlength="20" required></div><button class="btn alt">Join team</button></form>
+   <div id="teams"></div>
+  </section>
+  <section class="card"><h2>Wallet activity</h2><div id="ledger"><p class="muted">No wallet entries yet.</p></div></section>
+ </div>
+</main>
+<script>
+(function(){
+ const $=id=>document.getElementById(id);
+ let current=null;
+ const money=value=>new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN',maximumFractionDigits:0}).format(Number(value||0)/100);
+ const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+ function message(text){$('status').textContent=text;$('status').classList.remove('hidden')}
+ async function call(action,payload){
+  const response=await fetch('/api/loyalty',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action,...payload})});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(data.error||'This action could not be completed.');
+  return data;
+ }
+ function addCalendar(team){
+  const start=new Date(team.team_created_at||team.created_at||Date.now());
+  const end=new Date(start.getTime()+Number(team.duration_days||1)*86400000);
+  const stamp=d=>d.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z');
+  const text=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Ebnimaam//Challenge reminders//EN','BEGIN:VEVENT','UID:'+team.id+'@ebnimaam','DTSTAMP:'+stamp(new Date()),'DTSTART:'+stamp(start),'DTEND:'+stamp(end),'SUMMARY:'+String(team.title||team.team_name||'Ebnimaam challenge').replace(/[\r\n]/g,' '),'DESCRIPTION:Complete your Ebnimaam team challenge milestones and submit evidence.','END:VEVENT','END:VCALENDAR'].join('\r\n');
+  const url=URL.createObjectURL(new Blob([text],{type:'text/calendar;charset=utf-8'}));
+  const link=document.createElement('a');link.href=url;link.download='ebnimaam-challenge.ics';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
+ function render(data){
+  current=data;$('rewardsApp').classList.remove('hidden');$('status').classList.add('hidden');
+  $('balance').textContent=money(data.wallet?.availableKobo);
+  $('reserved').textContent=money(data.wallet?.reservedKobo)+' reserved for pending bank refunds';
+  $('referralCode').value=data.referral?.code||'';
+  $('referralProgress').textContent=(data.referral?.qualified||0)+' / 5 paid referrals';
+  $('rewardAmounts').textContent='Reward after your friend's first paid order: '+money(data.referral?.referredRewardKobo)+' · Your reward at five verified paid referrals: '+money(data.referral?.referrerRewardKobo);
+  $('ledger').innerHTML=(data.ledger||[]).length?data.ledger.map(item=>'<div class="ledger"><div><b>'+esc(item.description||item.entry_type)+'</b><div class="muted">'+esc(new Date(item.created_at).toLocaleString())+'</div></div><strong class="'+(item.direction==='credit'?'credit':'debit')+'">'+(item.direction==='credit'?'+':'−')+money(item.amount_kobo)+'</strong></div>').join(''):'<p class="muted">Your wallet activity will appear here.</p>';
+  $('withdrawals').innerHTML=(data.withdrawals||[]).map(item=>'<p class="notice">Bank refund request · '+money(item.amount_kobo)+' · '+esc(item.status)+' '+esc(item.admin_note||'')+'</p>').join('');
+  $('challenges').innerHTML=(data.challenges||[]).length?data.challenges.map(item=>'<article class="team"><h3>'+esc(item.title)+'</h3><p>'+esc(item.description)+'</p><p><span class="pill">'+Number(item.duration_days)+' days</span> <span class="pill">Team of 2–'+Number(item.max_team_size)+'</span> <span class="pill">'+money(item.reward_kobo)+' per member</span></p><button class="btn" data-create-team="'+esc(item.id)+'">Create a team</button></article>').join(''):'<p class="muted">New team challenges will appear here when the store administrator publishes them.</p>';
+  $('teams').innerHTML=(data.teams||[]).map(team=>{
+   const milestones=Array.isArray(team.milestones)?team.milestones:[];
+   return '<article class="team"><h3>'+esc(team.team_name)+'</h3><p>'+esc(team.title)+' · '+esc(team.status)+' · '+Number(team.member_count)+' member(s)</p><p>Your invite code: <b>'+esc(team.invite_code)+'</b></p><button class="btn alt" data-calendar="'+esc(team.id)+'">Add challenge dates to calendar</button>'+milestones.map(m=>'<div class="milestone"><b>'+esc(m.title)+'</b><form data-milestone-form="'+esc(team.id)+'" data-milestone-key="'+esc(m.key)+'"><textarea name="proof" rows="2" maxlength="2000" minlength="20" placeholder="Describe what your team completed and the evidence (minimum 20 characters)" required></textarea><button class="btn alt">Submit milestone evidence</button></form></div>').join('')+'</article>';
+  }).join('')||'<p class="muted">You have not joined a team challenge yet.</p>';
+  document.querySelectorAll('[data-create-team]').forEach(button=>button.addEventListener('click',async()=>{
+   const teamName=prompt('Choose a name for your team (3–60 characters):');if(!teamName)return;
+   try{const result=await call('create-team',{challengeId:button.dataset.createTeam,teamName});message('Team created. Share invite code '+result.team.invite_code+' with your teammates.');await load()}catch(e){message(e.message)}
+  }));
+  document.querySelectorAll('[data-calendar]').forEach(button=>button.addEventListener('click',()=>{const team=(data.teams||[]).find(x=>x.id===button.dataset.calendar);if(team)addCalendar(team)}));
+  document.querySelectorAll('[data-milestone-form]').forEach(form=>form.addEventListener('submit',async event=>{
+   event.preventDefault();const proof=new FormData(form).get('proof');
+   try{await call('submit-milestone',{teamId:form.dataset.milestoneForm,milestoneKey:form.dataset.milestoneKey,proof});message('Milestone submitted for review.');await load()}catch(e){message(e.message)}
+  }));
+ }
+ async function load(){
+  try{
+   const response=await fetch('/api/loyalty',{credentials:'same-origin',cache:'no-store'});
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok)throw new Error(data.error||'Sign in to view rewards.');
+   render(data);
+  }catch(error){message((error.message||'Sign in to view rewards.')+' Open your account to continue: '+location.origin+'/account.html')}
+ }
+ $('copyReferral').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('referralCode').value);message('Referral code copied.')}catch{ $('referralCode').select();message('Select and copy your referral code.')}});
+ $('shareReferral').addEventListener('click',async()=>{const code=$('referralCode').value;const url=location.origin+'/rewards.html?ref='+encodeURIComponent(code);const text='Join me on Ebnimaam. Use my referral code '+code+' before your first paid order: '+url;try{if(navigator.share)await navigator.share({title:'Ebnimaam referral',text,url});else{await navigator.clipboard.writeText(text);message('Referral invite copied.')}}catch{}});
+ $('claimReferral').addEventListener('submit',async event=>{event.preventDefault();try{const result=await call('claim-referral',{code:$('claimCode').value});message(result.message);await load()}catch(e){message(e.message)}});
+ $('joinTeam').addEventListener('submit',async event=>{event.preventDefault();try{await call('join-team',{inviteCode:$('teamInvite').value});message('You have joined the team.');$('teamInvite').value='';await load()}catch(e){message(e.message)}});
+ $('bankRefund').addEventListener('submit',async event=>{event.preventDefault();try{const result=await call('request-bank-refund',{amountKobo:Number($('refundAmount').value)*100,bankName:$('bankName').value,accountName:$('accountName').value,accountNumber:$('accountNumber').value});message(result.message);$('bankRefund').reset();await load()}catch(e){message(e.message)}});
+ const query=new URLSearchParams(location.search).get('ref');if(query)$('claimCode').value=query;
+ load();
+})();
+</script>
+</body></html>

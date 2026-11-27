@@ -96,3 +96,21 @@ Keep AUTH_SECRET configured; it signs private tracking links. Do not put these s
 
 The internal tracking page shows database status history and checks for updates every 30 seconds while the private link is open. Customers can also use the existing order-reference plus checkout-email lookup as a fallback. It is not a courier GPS feed. For map-based live location, a delivery partner API or rider location integration is required; a secure courier tracking URL can be saved per order in Admin.
 
+
+## Rewards, wallet, coupons and customer discovery
+
+The rewards area is available at `/rewards.html` for verified signed-in customers. It shows the wallet ledger, referral progress, bank-refund requests and team challenges. Wallet entries are auditable credits/debits. Wallet credit is reserved when checkout begins and debited only after Paystack verifies the remaining payment. A failed Paystack transaction releases its reservation; an ambiguous initialization/network result remains reserved until its payment status can be verified.
+
+Referral reward settings are configured by the owner in Admin → Rewards, wallet & challenges. A referrer qualifies after **five different referred accounts** each complete a verified paid order; the referred customer receives their own welcome reward after their first verified paid order. Reward amounts default to zero until configured by the owner.
+
+Team challenges support 2–5 members, 2–21 day durations, named milestones and evidence submissions. Every member must complete every milestone and an administrator must approve each submission before the per-member reward is credited. Challenge calendar dates can be exported by the customer as an `.ics` file; the website does not read a private calendar.
+
+Coupons are managed in Admin → Coupons and validated on the server for status, expiry, minimum subtotal, per-account use and redemption limit. Redemption is counted only after verified Paystack payment. The owner chooses and publishes all coupon terms; no automatic or hard-coded discount is enabled.
+
+Customers can sync their wishlist across devices after signing in, see recommendations for related in-stock products and use photo or voice search from the storefront. Photo search requires the server-side `GEMINI_API_KEY`; image selection is limited to a user-initiated JPG/PNG/WebP upload under 3 MB. Voice input is initiated only when the customer taps the microphone/search control. The browser handles microphone/camera permission prompts.
+
+Ebnimaam AI can answer questions across the live catalogue, store settings, published news, policies and (for a verified signed-in customer) that customer's own recent order details and available wallet credit. It is read-only: order changes, refund approvals, wallet adjustments, coupon creation and challenge approvals still require the appropriate customer or admin workflow. Configure `GEMINI_API_KEY` in the Vercel environment for full AI responses; without it, the existing limited quick-help fallback is used.
+
+Refund credits are added to the Ebnimaam wallet by an administrator after approving the return. Customers may request a bank refund from their wallet page; the request is reserved for admin review. A bank transfer is marked paid only after the administrator has completed the transfer manually. No automatic bank payout or Paystack refund API is claimed.
+
+The admin dashboard refreshes order and inventory data periodically and shows active products that are low on stock or out of stock. WhatsApp remains a customer-initiated contact link; no automated WhatsApp or SMS messages are sent.

@@ -92,6 +92,10 @@
       </form>
     </section>
   </section>
+  <section id="recommendationsSection" class="review-section">
+    <div class="eyebrow">Chosen for you</div><h2 class="section-heading">You may also like</h2>
+    <div id="recommendationGrid" class="review-list"><p class="review-muted">Finding similar pieces…</p></div>
+  </section>
 </main>
 <div class="sticky-buy" id="stickyBuy">
   <div class="sticky-inner">
@@ -133,7 +137,7 @@
 <div class="modal-backdrop" id="checkoutBackdrop" role="dialog" aria-modal="true" aria-labelledby="checkoutTitle">
   <div class="checkout-modal">
     <div class="modal-header"><h2 id="checkoutTitle">Secure checkout</h2><button class="close-button" id="checkoutClose" aria-label="Close checkout">×</button></div>
-    <p class="review-muted">No account needed. Add your details and delivery address to continue to Paystack.</p>
+    <p class="review-muted">Sign in to your verified Ebnimaam account before checkout. Your cart will be kept while you sign in.</p>
     <form class="checkout-form" id="checkoutForm">
       <div class="full"><label for="buyerName">Full name</label><input id="buyerName" name="name" autocomplete="name" minlength="2" required></div>
       <div><label for="buyerEmail">Email address</label><input id="buyerEmail" type="email" name="email" autocomplete="email" required></div>
@@ -142,7 +146,7 @@
       <div><label for="buyerCity">City / town</label><input id="buyerCity" name="city" required></div>
       <div class="full"><label for="buyerStreet">Street address</label><textarea id="buyerStreet" name="street" rows="2" required></textarea></div>
       <div><label for="buyerPostal">Postal code (optional)</label><input id="buyerPostal" name="postal"></div>
-      <div class="full checkout-total" id="checkoutEstimate">Select your state to estimate delivery.</div>
+      <div class="full checkout-total" id="checkoutEstimate">Select your state to estimate delivery.</div><div class="full"><label style="display:flex;gap:9px;align-items:flex-start;font-weight:500"><input style="width:auto;min-height:auto;margin-top:4px" type="checkbox" id="useWalletCredit" disabled> Use my Ebnimaam balance at checkout</label><p class="review-muted" id="walletBalanceHint">Checking your available balance…</p></div><div class="full"><label for="promoCode">Coupon code (optional)</label><input id="promoCode" maxlength="40" autocomplete="off" placeholder="Enter coupon code"></div>
       <div class="full"><label style="display:flex;gap:9px;align-items:flex-start;font-weight:500"><input style="width:auto;min-height:auto;margin-top:4px" type="checkbox" id="termsAgree" required> I confirm these details are correct and agree to the <a href="/terms.html" target="_blank" rel="noopener">checkout and delivery terms</a>.</label></div>
       <div class="full"><p class="notice" id="checkoutNotice" aria-live="polite"></p><button class="btn btn-primary" id="checkoutPay" type="submit" style="width:100%">Continue to Paystack ↗</button></div>
     </form>
@@ -158,7 +162,7 @@
   const escapeHtml=value=>String(value==null?"":value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
   const standardSizes=["S","M","L","XL","XXL"];
   const defaultChart=[{size:"S",chest:92,length:66,shoulder:41},{size:"M",chest:98,length:68,shoulder:43},{size:"L",chest:104,length:70,shoulder:45},{size:"XL",chest:110,length:72,shoulder:47},{size:"XXL",chest:116,length:74,shoulder:49}];
-  let catalog=[],product=null,cart=[],selectedSize="",selectedColor=null,fitPreference="regular",recommendedSize="",deliveryFees={default:5000},lastFocused=null;
+  let catalog=[],product=null,cart=[],selectedSize="",selectedColor=null,fitPreference="regular",recommendedSize="",deliveryFees={default:5000},lastFocused=null,checkoutWalletAvailableKobo=0;
   function loadCart(){try{const raw=JSON.parse(localStorage.getItem("ebnimaam_cart")||"[]");cart=Array.isArray(raw)?raw:[]}catch{cart=[]}}
   function saveCart(){localStorage.setItem("ebnimaam_cart",JSON.stringify(cart));updateCartBadge()}
   function updateCartBadge(){$("cartCount").textContent=String(cart.reduce((sum,item)=>sum+Number(item.qty||0),0))}
@@ -176,7 +180,7 @@
   }
   function openCart(){$("cartBackdrop").classList.add("open");renderCart();$("cartClose").focus()}
   function closeCart(){$("cartBackdrop").classList.remove("open");}
-  function openCheckout(){$("cartBackdrop").classList.remove("open");$("checkoutBackdrop").classList.add("open");$("buyerName").focus();updateEstimate()}
+  async function openCheckout(){const session=await fetch("/api/auth/get-session",{credentials:"same-origin",cache:"no-store"}).then(r=>r.ok?r.json():null).catch(()=>null);if(!session?.user?.id||!session.user.email||session.user.emailVerified!==true){localStorage.setItem("ebnimaam_return_checkout","1");location.href="/store.html";return}$("cartBackdrop").classList.remove("open");$("checkoutBackdrop").classList.add("open");await loadCheckoutWallet();$("buyerName").focus();updateEstimate()} async function loadCheckoutWallet(){const checkbox=$("useWalletCredit"),hint=$("walletBalanceHint");checkoutWalletAvailableKobo=0;if(checkbox){checkbox.checked=false;checkbox.disabled=true}try{const response=await fetch("/api/loyalty",{credentials:"same-origin",cache:"no-store"});const data=await response.json();if(!response.ok)throw new Error(data.error||"Balance unavailable");checkoutWalletAvailableKobo=Math.max(0,Number(data.wallet?.availableKobo||0));if(checkbox)checkbox.disabled=checkoutWalletAvailableKobo<100;if(hint)hint.textContent=checkoutWalletAvailableKobo>=100?"Available balance: "+money(checkoutWalletAvailableKobo/100)+". The server will confirm the amount at checkout.":"No available Ebnimaam balance right now."}catch{if(hint)hint.textContent="Sign in to Ebnimaam Rewards to view your balance."}}
   function closeCheckout(){$("checkoutBackdrop").classList.remove("open")}
   function renderCart(){
     const valid=cart.filter(line=>{const item=itemForCart(line);return item&&sizeStock(item,line.size)>0});
@@ -328,6 +332,16 @@
       }).join("");
     }catch{$("reviewList").innerHTML='<p class="review-muted">Reviews are temporarily unavailable.</p>'}
   }
+  async function loadRecommendations(){
+    const grid=$("recommendationGrid");if(!grid)return;
+    try{
+      const response=await fetch("/api/recommendations?productId="+encodeURIComponent(product.id),{cache:"no-store"});
+      const data=await response.json();if(!response.ok)throw new Error("Recommendations unavailable.");
+      const items=Array.isArray(data.products)?data.products:[];
+      if(!items.length){grid.innerHTML='<p class="review-muted">More pieces are being added to the collection.</p>';return}
+      grid.innerHTML=items.map(item=>'<article class="review-card"><a href="/product.html?id='+encodeURIComponent(item.id)+'" style="display:block;color:inherit;text-decoration:none"><img loading="lazy" src="'+escapeHtml(item.image||'/assets/ebnimaam-logo.webp')+'" alt="'+escapeHtml(item.name)+'" style="width:100%;aspect-ratio:4/4.5;object-fit:cover;border-radius:8px"><strong>'+escapeHtml(item.name)+'</strong><p>'+escapeHtml(item.category||'Collection')+'</p><b>'+money(item.price)+'</b></a></article>').join("");
+    }catch{grid.innerHTML='<p class="review-muted">Recommendations are temporarily unavailable.</p>'}
+  }
   async function submitReview(event){
     event.preventDefault();$("reviewNotice").textContent="Submitting your review…";
     try{
@@ -342,7 +356,8 @@
     if(!state){$("checkoutEstimate").textContent="Select your state to estimate delivery.";return}
     const amount=Number(deliveryFees[state]??deliveryFees.default??5000);
     const subtotal=cart.reduce((sum,line)=>{const item=itemForCart(line);return sum+(item?Number(item.price)*line.qty:0)},0);
-    $("checkoutEstimate").innerHTML="Items: <strong>"+money(subtotal)+"</strong><br>Estimated delivery: <strong>"+money(amount)+"</strong><br>Estimated total: <strong>"+money(subtotal+amount)+"</strong><br><small>Final total is calculated securely by the server.</small>";
+    const grossKobo=Math.round((subtotal+amount)*100);const useWallet=$("useWalletCredit")?.checked===true;const walletCredit=useWallet?Math.min(checkoutWalletAvailableKobo,Math.max(0,grossKobo-100)):0;const dueKobo=grossKobo-walletCredit;
+    $("checkoutEstimate").innerHTML="Items: <strong>"+money(subtotal)+"</strong><br>Estimated delivery: <strong>"+money(amount)+"</strong><br>Estimated total: <strong>"+money(subtotal+amount)+"</strong>"+(walletCredit>0?"<br>Ebnimaam balance applied: <strong>−"+money(walletCredit/100)+"</strong><br>Paystack amount due: <strong>"+money(dueKobo/100)+"</strong>":"")+"<br><small>Coupon, wallet credit and the final total are validated securely by the server.</small>";
   }
   async function checkout(event){
     event.preventDefault();
@@ -351,7 +366,7 @@
     const payload={
       customer:{name:$("buyerName").value.trim(),email:$("buyerEmail").value.trim(),phone:$("buyerPhone").value.trim()},
       address:{country:"Nigeria",state:$("buyerState").value,city:$("buyerCity").value.trim(),street:$("buyerStreet").value.trim(),postal:$("buyerPostal").value.trim()},
-      items:cart.map(line=>({productId:line.productId,size:line.size,color:line.color||"",qty:line.qty}))
+      items:cart.map(line=>({productId:line.productId,size:line.size,color:line.color||"",qty:line.qty})),promoCode:$("promoCode").value.trim(),useWallet:$("useWalletCredit").checked===true
     };
     try{
       const response=await fetch("/api/create-payment",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify(payload)});
@@ -366,7 +381,7 @@
     $("cartOpen").addEventListener("click",openCart);$("cartClose").addEventListener("click",closeCart);
     $("cartBackdrop").addEventListener("click",event=>{if(event.target===$("cartBackdrop"))closeCart()});
     $("checkoutClose").addEventListener("click",closeCheckout);$("checkoutBackdrop").addEventListener("click",event=>{if(event.target===$("checkoutBackdrop"))closeCheckout()});
-    $("checkoutForm").addEventListener("submit",checkout);$("buyerState").addEventListener("change",updateEstimate);
+    $("checkoutForm").addEventListener("submit",checkout);$("buyerState").addEventListener("change",updateEstimate);$("useWalletCredit").addEventListener("change",updateEstimate);
     $("sizeGuideOpen").addEventListener("click",()=>openSizeModal("finderTab"));$("sizeModalClose").addEventListener("click",closeSizeModal);
     $("sizeModal").addEventListener("click",event=>{if(event.target===$("sizeModal"))closeSizeModal()});
     document.querySelectorAll(".tab-button").forEach(btn=>btn.addEventListener("click",()=>activateTab(btn.dataset.tab)));
@@ -401,7 +416,7 @@
       $("productCategory").textContent=product.category||"The collection";
       $("productPrice").textContent=money(product.price);
       $("stickyPrice").textContent=money(product.price);
-      renderGallery();renderColors();renderSizes();renderDetails();renderChart();updateCartBadge();renderCart();loadReviews();setupSticky();
+      renderGallery();renderColors();renderSizes();renderDetails();renderChart();updateCartBadge();renderCart();loadReviews();loadRecommendations();setupSticky();
       $("fitHeight").value="";$("fitWeight").value="";
     }catch(error){$("loading").innerHTML="<p>"+escapeHtml(error.message||"The product could not be loaded.")+"</p><a class='btn btn-secondary' href='/store.html'>Back to shop</a>"}
   }
