@@ -50,7 +50,7 @@ export async function GET(req: Request) {
     if (!productId) return NextResponse.json({ error: 'Product ID is required.' }, { status: 400 });
     const [reviews, summary] = await Promise.all([
       pool.query("SELECT id,split_part(customer_name,' ',1) AS customer_name,rating,fit_feedback,comment,photo_url,created_at FROM public.ebnimaam_product_reviews WHERE product_id=$1 AND moderation_status='published' ORDER BY created_at DESC LIMIT 100", [productId]),
-      pool.query('SELECT COUNT(*)::int AS count,COALESCE(AVG(rating),0)::numeric(3,1) AS average FROM public.ebnimaam_product_reviews WHERE product_id=$1 AND moderation_status='published', [productId]),
+      pool.query("SELECT COUNT(*)::int AS count,COALESCE(AVG(rating),0)::numeric(3,1) AS average FROM public.ebnimaam_product_reviews WHERE product_id=$1 AND moderation_status='published'", [productId]),
     ]);
     return NextResponse.json({ reviews: reviews.rows, summary: summary.rows[0] || { count: 0, average: 0 } }, { headers: { 'cache-control': 'no-store' } });
   } catch {
