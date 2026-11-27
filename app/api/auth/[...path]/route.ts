@@ -136,7 +136,7 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
         return payload?.user?.id && payload?.user?.email ? payload.user : null;
       } catch { return null; }
     };
-    const loginSucceeded = upstream.ok && (
+    const loginSucceeded = (upstream.ok || (upstream.status >= 300 && upstream.status < 400)) && (
       (req.method === 'POST' && (signin || otpVerify)) ||
       (req.method === 'GET' && path[0] === 'callback')
     );
