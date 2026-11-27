@@ -42,7 +42,7 @@ export async function getVerifiedCustomer(req: Request): Promise<VerifiedCustome
 }
 
 export async function ensureLoyaltyTables() {
-  await loyaltyPool.query(\`
+  await loyaltyPool.query(`
     CREATE TABLE IF NOT EXISTS public.ebnimaam_loyalty_settings (
       id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
       referrer_reward_kobo BIGINT NOT NULL DEFAULT 0 CHECK (referrer_reward_kobo >= 0),
@@ -150,7 +150,7 @@ export async function ensureLoyaltyTables() {
       reviewed_at TIMESTAMPTZ,
       UNIQUE(team_id,day_number)
     );
-  \`);
+  `);
 }
 
 function encryptionKey() {
@@ -197,12 +197,12 @@ export async function processPaidReferralOrder(reference: string) {
   if (!reference) return;
   await ensureLoyaltyTables();
   const qualified = await loyaltyPool.query(
-    \`UPDATE public.ebnimaam_referrals r
+    `UPDATE public.ebnimaam_referrals r
      SET status='qualified',paid_order_reference=o.reference,qualified_at=NOW()
      FROM public.ebnimaam_orders o
      WHERE o.reference=$1 AND o.status='paid' AND o.auth_user_id=r.referred_user_id
        AND r.status='pending'
-     RETURNING r.referred_user_id,r.referrer_user_id\`,
+     RETURNING r.referred_user_id,r.referrer_user_id`,
     [reference]
   );
   const settings = await loyaltyPool.query('SELECT referrer_reward_kobo,referred_reward_kobo FROM public.ebnimaam_loyalty_settings WHERE id=1');
@@ -211,27 +211,27 @@ export async function processPaidReferralOrder(reference: string) {
   for (const referral of qualified.rows) {
     if (inviteeReward > 0) {
       await loyaltyPool.query(
-        \`INSERT INTO public.ebnimaam_wallet_ledger(user_id,entry_type,amount_kobo,status,source_key,description)
-         VALUES($1,'referral_reward',$2,'available',$3,$4) ON CONFLICT(source_key) DO NOTHING\`,
+        `INSERT INTO public.ebnimaam_wallet_ledger(user_id,entry_type,amount_kobo,status,source_key,description)
+         VALUES($1,'referral_reward',$2,'available',$3,$4) ON CONFLICT(source_key) DO NOTHING`,
         [referral.referred_user_id, inviteeReward, 'referral-invitee:' + referral.referred_user_id, 'Welcome reward for a completed referral purchase']
       );
     }
   }
   const owners = await loyaltyPool.query(
-    \`SELECT DISTINCT referrer_user_id FROM public.ebnimaam_referrals WHERE status='qualified' AND paid_order_reference=$1\`,
+    `SELECT DISTINCT referrer_user_id FROM public.ebnimaam_referrals WHERE status='qualified' AND paid_order_reference=$1`,
     [reference]
   );
   for (const owner of owners.rows) {
     const totals = await loyaltyPool.query(
-      \`SELECT COUNT(*)::int AS qualified FROM public.ebnimaam_referrals WHERE referrer_user_id=$1 AND status='qualified'\`,
+      `SELECT COUNT(*)::int AS qualified FROM public.ebnimaam_referrals WHERE referrer_user_id=$1 AND status='qualified'`,
       [owner.referrer_user_id]
     );
     const tiers = Math.floor(Number(totals.rows[0]?.qualified || 0) / 5);
     for (let tier = 1; tier <= tiers; tier++) {
       if (inviterReward <= 0) continue;
       await loyaltyPool.query(
-        \`INSERT INTO public.ebnimaam_wallet_ledger(user_id,entry_type,amount_kobo,status,source_key,description)
-         VALUES($1,'referral_reward',$2,'available',$3,$4) ON CONFLICT(source_key) DO NOTHING\`,
+        `INSERT INTO public.ebnimaam_wallet_ledger(user_id,entry_type,amount_kobo,status,source_key,description)
+         VALUES($1,'referral_reward',$2,'available',$3,$4) ON CONFLICT(source_key) DO NOTHING`,
         [owner.referrer_user_id, inviterReward, 'referral-inviter:' + owner.referrer_user_id + ':tier:' + tier, 'Reward for five referred customers completing paid orders']
       );
     }
@@ -241,10 +241,10 @@ export async function processPaidReferralOrder(reference: string) {
 export async function processAllQualifiedReferralRewards() {
   await ensureLoyaltyTables();
   const rows = await loyaltyPool.query(
-    \`SELECT DISTINCT r.paid_order_reference AS reference
+    `SELECT DISTINCT r.paid_order_reference AS reference
      FROM public.ebnimaam_referrals r
      JOIN public.ebnimaam_orders o ON o.reference=r.paid_order_reference
-     WHERE r.status='qualified' AND o.status='paid' LIMIT 200\`
+     WHERE r.status='qualified' AND o.status='paid' LIMIT 200`
   );
   for (const row of rows.rows) await processPaidReferralOrder(String(row.reference || ''));
   const settings = await loyaltyPool.query('SELECT referrer_reward_kobo,referred_reward_kobo FROM public.ebnimaam_loyalty_settings WHERE id=1');
@@ -252,23 +252,23 @@ export async function processAllQualifiedReferralRewards() {
   const inviteeReward = Number(settings.rows[0]?.referred_reward_kobo || 0);
   if (inviteeReward > 0) {
     await loyaltyPool.query(
-      \`INSERT INTO public.ebnimaam_wallet_ledger(user_id,entry_type,amount_kobo,status,source_key,description)
+      `INSERT INTO public.ebnimaam_wallet_ledger(user_id,entry_type,amount_kobo,status,source_key,description)
        SELECT r.referred_user_id,'referral_reward',$1,'available','referral-invitee:'||r.referred_user_id,'Welcome reward for a completed referral purchase'
        FROM public.ebnimaam_referrals r WHERE r.status='qualified'
-       ON CONFLICT(source_key) DO NOTHING\`,
+       ON CONFLICT(source_key) DO NOTHING`,
       [inviteeReward]
     );
   }
   if (inviterReward > 0) {
     const owners = await loyaltyPool.query(
-      \`SELECT referrer_user_id,COUNT(*)::int AS qualified FROM public.ebnimaam_referrals WHERE status='qualified' GROUP BY referrer_user_id\`
+      `SELECT referrer_user_id,COUNT(*)::int AS qualified FROM public.ebnimaam_referrals WHERE status='qualified' GROUP BY referrer_user_id`
     );
     for (const owner of owners.rows) {
       const tiers = Math.floor(Number(owner.qualified || 0) / 5);
       for (let tier = 1; tier <= tiers; tier++) {
         await loyaltyPool.query(
-          \`INSERT INTO public.ebnimaam_wallet_ledger(user_id,entry_type,amount_kobo,status,source_key,description)
-           VALUES($1,'referral_reward',$2,'available',$3,$4) ON CONFLICT(source_key) DO NOTHING\`,
+          `INSERT INTO public.ebnimaam_wallet_ledger(user_id,entry_type,amount_kobo,status,source_key,description)
+           VALUES($1,'referral_reward',$2,'available',$3,$4) ON CONFLICT(source_key) DO NOTHING`,
           [owner.referrer_user_id, inviterReward, 'referral-inviter:' + owner.referrer_user_id + ':tier:' + tier, 'Reward for five referred customers completing paid orders']
         );
       }
