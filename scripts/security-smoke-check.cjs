@@ -11,37 +11,41 @@ const trackingRoute = fs.readFileSync('app/api/track-order/route.ts', 'utf8');
 const paymentVerification = fs.readFileSync('app/api/verify-payment/route.ts', 'utf8');
 const reviewRoute = fs.readFileSync('app/api/product-reviews/route.ts', 'utf8');
 
-assert.match(config, /key:\\s*['"]X-Content-Type-Options['"],\\s*value:\\s*['"]nosniff['"]/);
-assert.match(config, /key:\\s*['"]X-Frame-Options['"],\\s*value:\\s*['"]SAMEORIGIN['"]/);
-assert.doesNotMatch(config, /key:\\s*['"]X-Frame-Options['"],\\s*value:\\s*['"]DENY['"]/);
-assert.match(config, /key:\\s*['"]Strict-Transport-Security['"]/);
-assert.match(config, /key:\\s*['"]Referrer-Policy['"]/);
-assert.match(storefront, /<iframe[^>]+id=["']accountFrame["'][^>]*>/);
-assert.match(storefront, /frame\\.src=['"]\\/account\\.html\\?embedded=1['"]/);
+assert.ok(config.includes("key: 'X-Content-Type-Options'") && config.includes("value: 'nosniff'"));
+assert.ok(config.includes("key: 'X-Frame-Options'") && config.includes("value: 'SAMEORIGIN'"));
+assert.ok(!config.includes("value: 'DENY'"));
+assert.ok(config.includes("key: 'Strict-Transport-Security'"));
+assert.ok(config.includes("key: 'Referrer-Policy'"));
+assert.ok(storefront.includes('id="accountFrame"'));
+assert.ok(storefront.includes("frame.src='/account.html?embedded=1'"));
 
 // Parse inline storefront/account scripts to catch browser-side syntax errors.
 for (const [file, html] of [['public/store.html', storefront], ['public/account.html', account]]) {
-  const scripts = [...html.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)].map((match) => match[1]).filter((source) => source.trim());
+  const scripts = html.split('<script').slice(1).map((block) => {
+    const start = block.indexOf('>');
+    const end = block.indexOf('</script>');
+    return start >= 0 && end > start ? block.slice(start + 1, end) : '';
+  }).filter((source) => source.trim());
   assert.ok(scripts.length, file + ' should contain its expected inline application script');
   for (const source of scripts) new vm.Script(source, { filename: file });
 }
 
 // Customer orders and private profile actions must validate the active device-bound session.
-assert.match(sessionGuard, /ebnimaam_customer_sessions/);
-assert.match(sessionGuard, /ebnimaam_customer_known_devices/);
-assert.match(sessionGuard, /HttpOnly/iu); // The source sets HttpOnly cookies for session tokens.
-assert.match(authProxy, /activateCustomerSession/);
-assert.match(authProxy, /isCurrentCustomerSession/);
-assert.match(trackingRoute, /getVerifiedCustomer/);
-assert.match(trackingRoute, /o\\.auth_user_id=\\$2/);
-assert.doesNotMatch(trackingRoute, /body\\?\\.email|body\\?\\.token/);
-assert.match(paymentVerification, /getVerifiedCustomer/);
-assert.match(paymentVerification, /owned\\.rowCount/);
-assert.match(reviewRoute, /isCurrentCustomerSession/);
+assert.ok(sessionGuard.includes('ebnimaam_customer_sessions'));
+assert.ok(sessionGuard.includes('ebnimaam_customer_known_devices'));
+assert.ok(sessionGuard.includes('httpOnly: true'));
+assert.ok(authProxy.includes('activateCustomerSession'));
+assert.ok(authProxy.includes('isCurrentCustomerSession'));
+assert.ok(trackingRoute.includes('getVerifiedCustomer'));
+assert.ok(trackingRoute.includes('o.auth_user_id=$2'));
+assert.ok(!trackingRoute.includes('body?.email') && !trackingRoute.includes('body?.token'));
+assert.ok(paymentVerification.includes('getVerifiedCustomer'));
+assert.ok(paymentVerification.includes('owned.rowCount'));
+assert.ok(reviewRoute.includes('isCurrentCustomerSession'));
 
 // The public app points to account sign-in for private tracking and official social follow links.
-assert.match(storefront, /window\\.trackOrder/);
-assert.match(storefront, /whatsappChannel/);
-assert.match(account, /continueAfterAccountAuth/);
+assert.ok(storefront.includes('window.trackOrder'));
+assert.ok(storefront.includes('whatsappChannel'));
+assert.ok(account.includes('continueAfterAccountAuth'));
 
 process.stdout.write('Security headers, browser script syntax, account-bound order access, and single-device session smoke checks passed.\\n');
