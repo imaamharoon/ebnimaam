@@ -123,7 +123,7 @@ export async function POST(req: Request) {
     if (action === 'request_bank_refund') {
       const amountNaira = Number(body?.amountNaira);
       const accountName = String(body?.accountName || '').trim().slice(0, 100);
-      const accountNumber = String(body?.accountNumber || '').replace(/[^0-9]/g, '').slice(0, 10);
+      const accountNumber = String(body?.accountNumber || '').replace(/[^0-9]/g, '');
       const bankName = String(body?.bankName || '').trim().slice(0, 100);
       if (!Number.isSafeInteger(amountNaira) || amountNaira < 100 || amountNaira > 100000000 || !Number.isSafeInteger(amountNaira * 100) || accountNumber.length !== 10 || accountName.length < 3 || bankName.length < 2) return fail('Enter an amount of at least ₦100 and valid bank account details.');
       const encrypted = encryptPrivateDetails({ accountName, accountNumber, bankName });
