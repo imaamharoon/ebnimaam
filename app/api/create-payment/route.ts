@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { Pool } from 'pg';
 import { checkRateLimit } from '../../../lib/rate-limit';
 import { sendOrderStatusEmail } from '../../../lib/order-notifications';
+import { isCurrentCustomerSession } from '../../../lib/customer-sessions';
 import { ensureLoyaltySchema, walletAvailable } from '../../../lib/loyalty';
 import { ensureCouponsSchema, reserveCoupon } from '../../../lib/coupons';
 
@@ -53,7 +54,7 @@ export async function POST(req: Request) {
         if (session.ok) {
           const sessionData = await session.json();
           const user = sessionData?.user;
-          if (user?.id && user?.email && user.emailVerified === true) {
+          if (user?.id && user?.email && user.emailVerified === true && await isCurrentCustomerSession(req, String(user.id))) {
             verifiedUser = { id: String(user.id), email: String(user.email), name: String(user.name || '') };
           }
         }
