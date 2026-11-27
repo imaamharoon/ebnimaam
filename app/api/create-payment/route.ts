@@ -230,15 +230,27 @@ export async function POST(req: Request) {
     });
     const paymentData = await paymentResponse.json().catch(() => null);
     if (!paymentResponse.ok || !paymentData?.status || !paymentData?.data?.authorization_url) {
-      const message = String(paymentData?.message || 'Paystack could not initialize this payment.');
-      await pool.query('UPDATE public.ebnimaam_orders SET status=$1,updated_at=NOW() WHERE reference=$2', ['initialization_failed', reference]);
-      await pool.query("UPDATE public.ebnimaam_wallet_reservations SET status='released',updated_at=NOW() WHERE reference=$1 AND status='reserved'",[reference]);
-      await pool.query("UPDATE public.ebnimaam_coupon_redemptions SET status='released' WHERE order_reference=$1 AND status='pending'",[reference]);
-      await pool.query(
-        'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
-        [reference,'initialization_failed',message.slice(0,500),'paystack'],
-      );
-      return NextResponse.json({ error: message }, { status: 502 });
+      const message = String(paymentData?.message || 'Paystack could not confirm payment initialization.');
+      // Only release customer funds when Paystack explicitly rejects a request. A 5xx,
+      // malformed body, or incomplete success response is ambiguous: the transaction
+      // may exist, so retain wallet/coupon reservations until verification resolves it.
+      const definitiveFailure =
+        (paymentResponse.status >= 400 && paymentResponse.status < 500) ||
+        (paymentResponse.ok && paymentData?.status === false);
+      if (definitiveFailure) {
+        await pool.query('UPDATE public.ebnimaam_orders SET status=$1,updated_at=NOW() WHERE reference=$2', ['initialization_failed', reference]);
+        await pool.query("UPDATE public.ebnimaam_wallet_reservations SET status='released',updated_at=NOW() WHERE reference=$1 AND status='reserved'",[reference]);
+        await pool.query("UPDATE public.ebnimaam_coupon_redemptions SET status='released' WHERE order_reference=$1 AND status='pending'",[reference]);
+        await pool.query(
+          'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
+          [reference,'initialization_failed',message.slice(0,500),'paystack'],
+        );
+      }
+      return NextResponse.json({
+        error: definitiveFailure ? message : 'Paystack’s response was incomplete. Your wallet and coupon reservations remain protected while the payment status is checked. Please do not retry the checkout yet.',
+        reference,
+        verificationRequired: !definitiveFailure,
+      }, { status: 502 });
     }
     await sendOrderStatusEmail(reference, 'pending', new URL(req.url).origin).catch(() => ({ deliveryStatus: 'failed' }));
     return NextResponse.json({ authorization_url: paymentData.data.authorization_url, reference, fulfilmentMethod, deliveryFee, walletCreditKobo, amountDueKobo, orderTotalKobo });
