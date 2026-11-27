@@ -2,7 +2,7 @@ name: Preview build validation
 
 on:
   push:
-    branches: [fix/paystack-size-stock-guards-20261127]
+    branches: [fix/paystack-size-stock-guards-20261127, security-experience-upgrade-20261127]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -22,8 +22,10 @@ jobs:
         with:
           node-version: 22
       - name: Install dependencies
-        run: npm install --no-audit --no-fund --package-lock=false
+        run: npm install --no-audit --no-fund
+      - name: Audit dependencies for high-severity vulnerabilities
+        run: npm audit --audit-level=high
       - name: Type-check
-        run: npx tsc --noEmit
+        run: npm run typecheck
       - name: Build Next.js production bundle
         run: npm run build

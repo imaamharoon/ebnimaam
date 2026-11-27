@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { isAdminRequest } from '../../../lib/admin-auth';
+import { recordAdminActivity } from '../../../lib/admin-audit';
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 async function init() {
@@ -39,6 +40,7 @@ export async function POST(req: Request) {
        ON CONFLICT(id) DO UPDATE SET title=$2,content=$3,image=$4,published=$5,updated_at=NOW()`,
       [id,title,content,image,published],
     );
+    await recordAdminActivity('news.saved', 'news', id, { title });
     return NextResponse.json({ ok: true, id });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'News save failed.' }, { status: 500 });
@@ -50,6 +52,7 @@ export async function DELETE(req: Request) {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: 'News item ID is required.' }, { status: 400 });
     await pool.query('DELETE FROM public.ebnimaam_news WHERE id=$1', [String(id)]);
+    await recordAdminActivity('news.deleted', 'news', String(id));
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: 'News delete failed.' }, { status: 500 });

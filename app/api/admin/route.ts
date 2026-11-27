@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'crypto';
 import { Pool } from 'pg';
 import { createAdminSession, isAdminRequest, ADMIN_SESSION_MAX_AGE } from '../../../lib/admin-auth';
 import { checkRateLimit } from '../../../lib/rate-limit';
+import { getRecentAdminActivity, recordAdminActivity } from '../../../lib/admin-audit';
 
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
@@ -21,6 +22,7 @@ export async function POST(req: Request) {
     if (typeof password !== 'string' || !sameSecret(password, secret)) {
       return NextResponse.json({ error: 'Incorrect password.' }, { status: 401 });
     }
+    await recordAdminActivity('admin.login.success', 'admin_session', null, { method: 'password' });
     const response = NextResponse.json({ ok: true });
     response.cookies.set('ebn_admin', createAdminSession(secret), {
       httpOnly: true, secure: new URL(req.url).protocol === 'https:', sameSite: 'strict',
@@ -35,7 +37,7 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   if (!isAdminRequest(req, secret)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
-    const [result, customerResult] = await Promise.all([
+    const [result, customerResult, activity] = await Promise.all([
       pool.query(
         `SELECT o.reference,o.auth_user_id,o.customer_email,o.customer_name,o.customer_phone,o.address,
                 o.amount_kobo,o.currency,o.status,o.fulfilment_status,o.items,o.created_at,o.paid_at,
@@ -53,8 +55,9 @@ export async function GET(req: Request) {
          FROM public.ebnimaam_orders WHERE customer_email IS NOT NULL AND customer_email<>''
          GROUP BY LOWER(customer_email) ORDER BY last_order_at DESC LIMIT 500`,
       ),
+      getRecentAdminActivity(40),
     ]);
-    return NextResponse.json({ orders: result.rows, customers: customerResult.rows }, { headers: { 'cache-control': 'no-store' } });
+    return NextResponse.json({ orders: result.rows, customers: customerResult.rows, activity }, { headers: { 'cache-control': 'no-store' } });
   } catch {
     return NextResponse.json({ error: 'Orders unavailable.' }, { status: 503 });
   }
@@ -92,6 +95,9 @@ export async function PATCH(req: Request) {
       );
     }
     await client.query('COMMIT');
+    if (previous !== fulfilment_status) {
+      await recordAdminActivity('order.fulfilment.updated', 'order', String(reference), { from: previous, to: fulfilment_status });
+    }
     return NextResponse.json({ ok: true, fulfilment_status });
   } catch {
     await client.query('ROLLBACK').catch(() => {});

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
 import { isAdminRequest } from '../../../lib/admin-auth';
+import { recordAdminActivity } from '../../../lib/admin-audit';
 
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
@@ -113,6 +114,7 @@ export async function POST(req: Request) {
        sizes=$8::jsonb,stock=$9,is_active=$10,updated_at=NOW(),gallery=$11::jsonb,size_stock=$12::jsonb,product_details=$13::jsonb`,
       [id,name,category,price,description,image,String(product.tag || '').slice(0, 60),JSON.stringify(sizes),stock,active,JSON.stringify(gallery),JSON.stringify(sizeStock),JSON.stringify(details)],
     );
+    await recordAdminActivity('product.saved', 'product', id, { name });
     return NextResponse.json({ ok: true, id, is_active: active });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Product save failed.' }, { status: 400 });
@@ -124,6 +126,7 @@ export async function DELETE(req: Request) {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: 'Product ID is required.' }, { status: 400 });
     await pool.query('UPDATE public.ebnimaam_products SET is_active=FALSE,updated_at=NOW() WHERE id=$1', [String(id)]);
+    await recordAdminActivity('product.archived', 'product', String(id));
     return NextResponse.json({ ok: true, archived: true });
   } catch {
     return NextResponse.json({ error: 'Product archive failed.' }, { status: 500 });

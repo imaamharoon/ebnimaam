@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { checkRateLimit } from '../../../lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,6 +46,10 @@ export async function GET(req: Request) {
   }
 }
 export async function POST(req: Request) {
+  let allowed = false;
+  try { allowed = await checkRateLimit(req, 'product-review-submit', 8, 15 * 60); }
+  catch { return NextResponse.json({ error: 'Reviews are temporarily unavailable. Please try again shortly.' }, { status: 503 }); }
+  if (!allowed) return NextResponse.json({ error: 'Too many review attempts. Please wait 15 minutes and try again.' }, { status: 429, headers: { 'retry-after': '900' } });
   try {
     const user = await customer(req);
     if (!user) return NextResponse.json({ error: 'Sign in with your verified account to leave a purchase-verified review.' }, { status: 401 });

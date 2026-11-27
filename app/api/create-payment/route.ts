@@ -21,6 +21,10 @@ function fallbackDelivery(state: string) { return deliveryFees[state] ?? 5000; }
 
 export async function POST(req: Request) {
   let reference = '';
+  const declaredSize = Number(req.headers.get('content-length') || 0);
+  if (Number.isFinite(declaredSize) && declaredSize > 32_768) {
+    return NextResponse.json({ error: 'Your checkout request is too large. Please review your cart and try again.' }, { status: 413 });
+  }
   try {
     if (!process.env.PAYSTACK_SECRET_KEY || !process.env.DATABASE_URL) {
       return NextResponse.json({ error: 'Checkout is temporarily unavailable.' }, { status: 503 });
