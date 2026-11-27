@@ -38,8 +38,8 @@ function normalizeSocialLinks(input: unknown) {
   return normalized;
 }
 const defaultSettings = {
-  storeName:'ebnimaam',country:'Nigeria',deliveryCountries:['Nigeria'],deliveryFeesByState:{},
-  pickupAddress:'',pickupHours:'',holidayExceptions:'',deliveryRules:'',
+  storeName:'ebnimaam',country:'Nigeria',deliveryCountries:['Nigeria'],deliveryFeesByState:{},deliveryFeesConfirmed:false,
+  pickupAddress:'',pickupAddressConfirmed:false,pickupHours:'',holidayExceptions:'',deliveryRules:'',
   supportEmail:'ebnimaam.com@gmail.com',supportPhone:'08145672755',lowStockThreshold:3,socialLinks:{whatsappChannel:WHATSAPP_CHANNEL_URL},
   returnsPolicy:'',privacyPolicy:'',terms:'',shippingPolicy:'',promotions:[],
 };
@@ -90,6 +90,8 @@ export async function PUT(req: Request) {
       ...defaultSettings,
       ...body,
       pickupAddress: String(body.pickupAddress ?? '').trim().slice(0, 500),
+      pickupAddressConfirmed: body.pickupAddressConfirmed === true && !!String(body.pickupAddress ?? '').trim(),
+      deliveryFeesConfirmed: body.deliveryFeesConfirmed === true && Object.keys(deliveryFeesByState).length > 0,
       pickupHours: String(body.pickupHours ?? '').trim().slice(0, 240),
       country:'Nigeria',
       deliveryCountries:['Nigeria'],
