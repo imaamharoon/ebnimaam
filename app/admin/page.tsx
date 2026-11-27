@@ -143,7 +143,7 @@ export default function Admin(){
  <button type="submit">Record stock adjustment</button>
 </form>
 <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:14}}>
- <b>Recent movements ({stockMovements.length})</b>
+ <b>Stock movement history ({stockMovements.length})</b>
  <button className="secondary" type="button" onClick={()=>void loadStockMovements()}>Refresh movements</button>
 </div>
 {stockMovements.length?stockMovements.slice(0,100).map(movement=><article key={movement.id}>
