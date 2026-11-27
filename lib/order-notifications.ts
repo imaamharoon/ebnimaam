@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { Pool } from 'pg';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 3 });
-const validStatuses = new Set(['pending','picked','shipped','delivered','cancelled','ready_for_pickup','collected','payment_failed']);
+const validStatuses = new Set(['pending','processing','picked','shipped','delivered','cancelled','ready_for_pickup','collected','payment_failed']);
 
 function parseObject(value: any): Record<string, any> {
   if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = {}; } }
@@ -41,6 +41,7 @@ export function verifyOrderTrackingToken(token: string): string | null {
 function copyFor(status: string, pickup: boolean) {
   const copies: Record<string, {subject:string;heading:string;message:string}> = {
     pending: { subject:'We received your Ebnimaam order', heading:'Your order has been received', message:'Your order has been saved and is awaiting Paystack payment confirmation. We will begin fulfilment once payment is verified.' },
+    processing: { subject:'Your Ebnimaam payment is confirmed', heading:'Payment confirmed — we are preparing your order', message:'Paystack has confirmed your payment. Your order is now with our team for preparation. We will keep you updated as it moves through fulfilment.' },
     picked: { subject:'Your Ebnimaam items have been picked', heading:'Your items have been picked', message:pickup ? 'Our team has picked the items in your order and is preparing them for collection.' : 'Our team has picked the items in your order and is preparing them for dispatch.' },
     shipped: { subject:'Your Ebnimaam order is on its way', heading:'Your order is on its way', message:'Your parcel has been handed to the delivery service. Follow the latest updates using your private tracking link.' },
     delivered: { subject:'Your Ebnimaam order has been delivered', heading:'Your order has been delivered', message:'Your Ebnimaam order has been marked as delivered. Thank you for shopping with us.' },
