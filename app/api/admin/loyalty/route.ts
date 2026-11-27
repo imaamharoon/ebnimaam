@@ -3,7 +3,7 @@ import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
 import { isAdminRequest } from '../../../../lib/admin-auth';
 import { recordAdminActivity } from '../../../../lib/admin-audit';
-import { addWalletEntry, ensureLoyaltySchema, walletBalance } from '../../../../lib/loyalty';
+import { addWalletEntry, decryptBankDetails, ensureLoyaltySchema, walletBalance } from '../../../../lib/loyalty';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,9 +44,10 @@ export async function GET(req: Request) {
         `SELECT l.user_id,MAX(p.email) AS email,MAX(p.full_name) AS full_name,COALESCE(SUM(CASE WHEN l.direction='credit' THEN l.amount_kobo ELSE -l.amount_kobo END),0)::bigint AS balance_kobo
          FROM public.ebnimaam_wallet_ledger l LEFT JOIN public.ebnimaam_customer_profiles p ON p.user_id=l.user_id GROUP BY l.user_id ORDER BY balance_kobo DESC LIMIT 50`),
     ]);
+    const safeWithdrawals=withdrawals.rows.map((row:any)=>({ ...row, bank_details:decryptBankDetails(row.bank_details?.encrypted) }));
     return NextResponse.json({
       settings:settings.rows[0]||{referred_reward_kobo:0,referrer_reward_kobo:0,referral_threshold:5,low_stock_threshold:3},
-      withdrawals:withdrawals.rows,challenges:challenges.rows,submissions:submissions.rows,referrals:referrals.rows,wallets:wallets.rows,
+      withdrawals:safeWithdrawals,challenges:challenges.rows,submissions:submissions.rows,referrals:referrals.rows,wallets:wallets.rows,
     },{headers:{'cache-control':'no-store'}});
   } catch {
     return NextResponse.json({error:'Loyalty administration is temporarily unavailable.'},{status:503});

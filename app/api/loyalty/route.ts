@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { randomBytes, randomUUID } from 'crypto';
 import { checkRateLimit } from '../../../lib/rate-limit';
-import { getVerifiedCustomer, ensureLoyaltySchema, walletBalance, walletAvailable } from '../../../lib/loyalty';
+import { getVerifiedCustomer, ensureLoyaltySchema, encryptBankDetails, walletBalance, walletAvailable } from '../../../lib/loyalty';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -165,7 +165,7 @@ export async function POST(req: Request) {
         await client.query(
           `INSERT INTO public.ebnimaam_wallet_withdrawals(user_id,amount_kobo,bank_details)
            VALUES($1,$2,$3::jsonb)`,
-          [user.id,amountKobo,JSON.stringify({bankName,accountName,accountNumber})]);
+          [user.id,amountKobo,JSON.stringify({encrypted:encryptBankDetails({bankName,accountName,accountNumber})})]);
         await client.query('COMMIT');
         return NextResponse.json({ok:true,message:'Your bank refund request is pending review. The wallet balance remains reserved until Ebnimaam processes it.'});
       }catch(error:any){await client.query('ROLLBACK').catch(()=>{});throw error}

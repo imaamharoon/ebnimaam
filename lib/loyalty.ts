@@ -1,6 +1,35 @@
 import type { Pool, PoolClient } from 'pg';
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'crypto';
 
 const authBase = (process.env.NEON_AUTH_BASE_URL || 'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neon.tech/ebnimaam/auth').replace(/\/$/, '');
+
+function bankDetailsKey() {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret || secret.length < 32) throw new Error('Bank detail encryption is not configured.');
+  return createHmac('sha256', secret).update('ebnimaam-bank-refund-details-v1').digest();
+}
+
+export function encryptBankDetails(details: { bankName: string; accountName: string; accountNumber: string }) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', bankDetailsKey(), iv);
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(details), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return ['v1', iv.toString('base64'), tag.toString('base64'), ciphertext.toString('base64')].join('.');
+}
+
+export function decryptBankDetails(value: unknown) {
+  try {
+    const [version, ivPart, tagPart, ciphertextPart] = String(value || '').split('.');
+    if (version !== 'v1' || !ivPart || !tagPart || !ciphertextPart) return null;
+    const decipher = createDecipheriv('aes-256-gcm', bankDetailsKey(), Buffer.from(ivPart, 'base64'));
+    decipher.setAuthTag(Buffer.from(tagPart, 'base64'));
+    const plaintext = Buffer.concat([decipher.update(Buffer.from(ciphertextPart, 'base64')), decipher.final()]).toString('utf8');
+    const details = JSON.parse(plaintext);
+    if (!details || typeof details !== 'object' || typeof details.bankName !== 'string' || typeof details.accountName !== 'string' || typeof details.accountNumber !== 'string') return null;
+    return { bankName: details.bankName, accountName: details.accountName, accountNumber: details.accountNumber };
+  } catch { return null; }
+}
+
 
 export async function getVerifiedCustomer(req: Request) {
   const cookie = req.headers.get('cookie') || '';
