@@ -192,16 +192,17 @@ function updateFulfilmentMethodUi(){
  const form=document.getElementById('checkoutForm');
  if(!form)return;
  const pickupAddress=String(checkoutStoreSettings.pickupAddress||'').trim();
+ const pickupConfirmed=checkoutStoreSettings.pickupAddressConfirmed===true;
  const pickupChoice=document.getElementById('pickupChoice');
  const pickupRadio=form.querySelector('input[name="fulfilmentMethod"][value="pickup"]');
  const deliveryFields=document.getElementById('deliveryAddressFields');
  const pickupDetails=document.getElementById('pickupDetails');
- if(pickupRadio)pickupRadio.disabled=!pickupAddress;
- if(!pickupAddress&&pickupRadio?.checked){
+ if(pickupRadio)pickupRadio.disabled=!(pickupConfirmed&&pickupAddress);
+ if(!(pickupConfirmed&&pickupAddress)&&pickupRadio?.checked){
   const deliveryRadio=form.querySelector('input[name="fulfilmentMethod"][value="delivery"]');
   if(deliveryRadio)deliveryRadio.checked=true;
  }
- const pickup=selectedFulfilmentMethod()==='pickup'&&!!pickupAddress;
+ const pickup=selectedFulfilmentMethod()==='pickup'&&pickupConfirmed&&!!pickupAddress;
  if(deliveryFields)deliveryFields.hidden=pickup;
  if(deliveryFields){
   deliveryFields.querySelectorAll('[name="state"],[name="city"],[name="street"]').forEach((field)=>{
@@ -242,7 +243,7 @@ async function updateCheckoutSummary(){
  const fees=checkoutStoreSettings.deliveryFeesByState||{};
  const configuredFee=state?(fees[state]??fees.default):null;
  const numericFee=Number(configuredFee);
- const feeIsConfigured=configuredFee!==undefined&&configuredFee!==null&&configuredFee!==''&&Number.isSafeInteger(numericFee)&&numericFee>=0&&numericFee<=50000;
+ const feeIsConfigured=checkoutStoreSettings.deliveryFeesConfirmed===true&&configuredFee!==undefined&&configuredFee!==null&&configuredFee!==''&&Number.isSafeInteger(numericFee)&&numericFee>=0&&numericFee<=50000;
  const fee=pickup?0:(feeIsConfigured?numericFee:null);
  const total=fee===null?null:subtotal+fee;
  const useWallet=!!document.getElementById('useWalletCredit')?.checked;
