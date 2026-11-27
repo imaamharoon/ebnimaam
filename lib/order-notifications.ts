@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 import { Pool } from 'pg';
+import nodemailer from 'nodemailer';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 3 });
 const validStatuses = new Set(['pending','processing','picked','shipped','delivered','cancelled','ready_for_pickup','collected','payment_failed']);
@@ -12,7 +13,7 @@ function html(value: unknown): string {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c] || c));
 }
 export function isOrderEmailConfigured(): boolean {
-  return Boolean((process.env.BREVO_API_KEY || process.env.RESEND_API_KEY) && process.env.EMAIL_FROM && process.env.AUTH_SECRET);
+  return Boolean(((process.env.SMTP_USER && process.env.SMTP_PASS) || process.env.BREVO_API_KEY || process.env.RESEND_API_KEY) && process.env.EMAIL_FROM && process.env.AUTH_SECRET);
 }
 export async function ensureOrderEmailEventsTable(): Promise<void> {
   await pool.query("CREATE TABLE IF NOT EXISTS public.ebnimaam_order_email_events (event_key TEXT PRIMARY KEY, reference TEXT NOT NULL, status_key TEXT NOT NULL, recipient TEXT NOT NULL, delivery_status TEXT NOT NULL DEFAULT 'pending', provider_message_id TEXT, last_error TEXT, attempt_count INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), sent_at TIMESTAMPTZ)");
@@ -75,9 +76,11 @@ export async function sendOrderStatusEmail(reference: string, statusInput: strin
   const brevoKey = process.env.BREVO_API_KEY || '';
   const resendKey = process.env.RESEND_API_KEY || '';
   const sender = process.env.EMAIL_FROM || '';
-  const provider = brevoKey ? 'brevo' : (resendKey ? 'resend' : '');
+  const smtpUser = process.env.SMTP_USER || '';
+  const smtpPass = process.env.SMTP_PASS || '';
+  const provider = smtpUser && smtpPass ? 'smtp' : (brevoKey ? 'brevo' : (resendKey ? 'resend' : ''));
   if (!provider || !sender || !process.env.AUTH_SECRET || !recipient) {
-    const reason = !recipient ? 'Customer email is missing.' : 'Email setup is incomplete. Configure BREVO_API_KEY (recommended) and EMAIL_FROM in Vercel.';
+    const reason = !recipient ? 'Customer email is missing.' : 'Email setup is incomplete. Configure SMTP_USER, SMTP_PASS and EMAIL_FROM in Vercel (or a supported API provider).';
     await pool.query('UPDATE public.ebnimaam_order_email_events SET delivery_status=$1,last_error=$2,updated_at=NOW() WHERE event_key=$3',[recipient?'not_configured':'failed',reason,eventKey]);
     return { deliveryStatus:recipient?'not_configured':'failed',reason };
   }
@@ -99,7 +102,13 @@ export async function sendOrderStatusEmail(reference: string, statusInput: strin
   try {
     let response: Response;
     let payload: any;
-    if (provider === 'brevo') {
+    if (provider === 'smtp') {
+      const port = Number(process.env.SMTP_PORT || 465);
+      const transport = nodemailer.createTransport({host:process.env.SMTP_HOST||'smtp.gmail.com',port,secure:port===465,auth:{user:smtpUser,pass:smtpPass}});
+      const info = await transport.sendMail({from:sender,to:recipient,subject:copy.subject+' · '+reference,html:body,text:textBody});
+      payload = {messageId:info.messageId};
+      response = new Response(JSON.stringify(payload),{status:info.accepted?.length ? 200 : 400});
+    } else if (provider === 'brevo') {
       const match = sender.match(/^\\s*(.*?)\\s*<([^<>]+)>\\s*$/);
       const senderEmail = match ? match[2].trim() : sender.trim();
       const senderName = match ? match[1].replace(/^['\"]|['\"]$/g,'').trim() : 'Ebnimaam';
@@ -108,7 +117,7 @@ export async function sendOrderStatusEmail(reference: string, statusInput: strin
       response = await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+resendKey,'Content-Type':'application/json'},body:JSON.stringify({from:sender,to:[recipient],subject:copy.subject+' · '+reference,html:body,text:textBody}),cache:'no-store',signal:AbortSignal.timeout(10000)});
     }
     payload = await response.json().catch(()=>({}));
-    const messageId = provider === 'brevo' ? payload?.messageId : payload?.id;
+    const messageId = provider === 'smtp' ? payload?.messageId : (provider === 'brevo' ? payload?.messageId : payload?.id);
     if (!response.ok || !messageId) {
       const reason = String(payload?.message||payload?.error||payload?.code||'Email provider could not accept the message.').slice(0,400);
       await pool.query("UPDATE public.ebnimaam_order_email_events SET delivery_status='failed',last_error=$1,updated_at=NOW() WHERE event_key=$2",[reason,eventKey]);
