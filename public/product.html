@@ -162,7 +162,7 @@
   const escapeHtml=value=>String(value==null?"":value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
   const standardSizes=["S","M","L","XL","XXL"];
   const defaultChart=[{size:"S",chest:92,length:66,shoulder:41},{size:"M",chest:98,length:68,shoulder:43},{size:"L",chest:104,length:70,shoulder:45},{size:"XL",chest:110,length:72,shoulder:47},{size:"XXL",chest:116,length:74,shoulder:49}];
-  let catalog=[],product=null,cart=[],selectedSize="",selectedColor=null,fitPreference="regular",recommendedSize="",deliveryFees={default:5000},lastFocused=null,checkoutWalletAvailableKobo=0;
+  let catalog=[],product=null,cart=[],selectedSize="",selectedColor=null,fitPreference="regular",recommendedSize="",deliveryFees={},lastFocused=null,checkoutWalletAvailableKobo=0;
   function loadCart(){try{const raw=JSON.parse(localStorage.getItem("ebnimaam_cart")||"[]");cart=Array.isArray(raw)?raw:[]}catch{cart=[]}}
   function saveCart(){localStorage.setItem("ebnimaam_cart",JSON.stringify(cart));updateCartBadge()}
   function updateCartBadge(){$("cartCount").textContent=String(cart.reduce((sum,item)=>sum+Number(item.qty||0),0))}
@@ -354,7 +354,16 @@
   async function updateEstimate(){
     const state=$("buyerState").value;
     if(!state){$("checkoutEstimate").textContent="Select your state to estimate delivery.";return}
-    const amount=Number(deliveryFees[state]??deliveryFees.default??5000);
+    const configuredFee=deliveryFees[state]??deliveryFees.default;
+    if(configuredFee===undefined||configuredFee===null||configuredFee===''){
+      $("checkoutEstimate").textContent="Delivery pricing for this state has not been configured. Please contact Ebnimaam before checkout.";
+      return;
+    }
+    const amount=Number(configuredFee);
+    if(!Number.isSafeInteger(amount)||amount<0||amount>50000){
+      $("checkoutEstimate").textContent="The delivery fee for this state needs to be checked by Ebnimaam before checkout.";
+      return;
+    }
     const subtotal=cart.reduce((sum,line)=>{const item=itemForCart(line);return sum+(item?Number(item.price)*line.qty:0)},0);
     const grossKobo=Math.round((subtotal+amount)*100);const useWallet=$("useWalletCredit")?.checked===true;const walletCredit=useWallet?Math.min(checkoutWalletAvailableKobo,Math.max(0,grossKobo-100)):0;const dueKobo=grossKobo-walletCredit;
     $("checkoutEstimate").innerHTML="Items: <strong>"+money(subtotal)+"</strong><br>Estimated delivery: <strong>"+money(amount)+"</strong><br>Estimated total: <strong>"+money(subtotal+amount)+"</strong>"+(walletCredit>0?"<br>Ebnimaam balance applied: <strong>−"+money(walletCredit/100)+"</strong><br>Paystack amount due: <strong>"+money(dueKobo/100)+"</strong>":"")+"<br><small>Coupon, wallet credit and the final total are validated securely by the server.</small>";
@@ -403,12 +412,17 @@
       const [catalogResponse,settingsResponse]=await Promise.all([fetch("/api/products",{cache:"no-store"}),fetch("/api/store-settings",{cache:"no-store"})]);
       const catalogue=await catalogResponse.json();if(!catalogResponse.ok)throw new Error("The collection is temporarily unavailable.");
       catalog=Array.isArray(catalogue.products)?catalogue.products:[];
-      const settings=await settingsResponse.json().catch(()=>({}));deliveryFees=settings.settings&&settings.settings.deliveryFeesByState?settings.settings.deliveryFeesByState:deliveryFees;
+      const settings=await settingsResponse.json().catch(()=>({}));deliveryFees=settings.settings&&settings.settings.deliveryFeesByState?settings.settings.deliveryFeesByState:{};
       const phone=String(settings.settings&&settings.settings.supportPhone||"2348145672755").replace(/\D/g,"");
       if(phone){let digits=phone;if(digits.startsWith("0"))digits="234"+digits.slice(1);else if(!digits.startsWith("234"))digits="234"+digits;$("whatsappSupport").href="https://wa.me/"+digits+"?text="+encodeURIComponent("Hello ebnimaam, I have a question about a product.");$("whatsappSupport").hidden=false}
       const id=new URLSearchParams(location.search).get("id");
       product=catalog.find(item=>String(item.id)===String(id)&&Number(item.stock)>0);
       if(!product){$("loading").hidden=true;$("notFound").hidden=false;return}
+      try{
+        const recent=JSON.parse(localStorage.getItem("ebnimaam_recently_viewed")||"[]");
+        const ids=Array.isArray(recent)?recent.map(String).filter(value=>value!==String(product.id)):[];
+        localStorage.setItem("ebnimaam_recently_viewed",JSON.stringify([String(product.id),...ids].slice(0,8)));
+      }catch{}
       $("loading").hidden=true;$("productApp").hidden=false;
       document.title=product.name+" | ebnimaam";
       $("breadcrumbName").textContent=product.name;
