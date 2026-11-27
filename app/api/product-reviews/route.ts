@@ -95,7 +95,7 @@ export async function POST(req: Request) {
       `INSERT INTO public.ebnimaam_product_reviews(product_id,user_id,customer_name,rating,fit_feedback,comment,photo_url)
        VALUES($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT(product_id,user_id) DO UPDATE SET customer_name=EXCLUDED.customer_name,rating=EXCLUDED.rating,
-       fit_feedback=EXCLUDED.fit_feedback,comment=EXCLUDED.comment,photo_url=EXCLUDED.photo_url,moderation_status='published',created_at=NOW()`,
+       fit_feedback=EXCLUDED.fit_feedback,comment=EXCLUDED.comment,photo_url=EXCLUDED.photo_url,created_at=NOW()`,
       [productId, user.id, customerName, rating, fit, comment, photo || null],
     );
     return NextResponse.json({ ok: true });
