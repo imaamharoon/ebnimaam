@@ -25,6 +25,8 @@ const productQuestionsRoute = fs.readFileSync('app/api/product-questions/route.t
 const adminProductQuestionsRoute = fs.readFileSync('app/api/admin/product-questions/route.ts', 'utf8');
 const reviewReportRoute = fs.readFileSync('app/api/product-reviews/report/route.ts', 'utf8');
 const adminReviewRoute = fs.readFileSync('app/api/admin/product-reviews/route.ts', 'utf8');
+const adminStockRoute = fs.readFileSync('app/api/admin/stock-movements/route.ts', 'utf8');
+const productsRoute = fs.readFileSync('app/api/products/route.ts', 'utf8');
 
 assert.ok(config.includes("key: 'X-Content-Type-Options'") && config.includes("value: 'nosniff'"));
 assert.ok(config.includes("key: 'X-Frame-Options'") && config.includes("value: 'SAMEORIGIN'"));
@@ -127,6 +129,16 @@ assert.ok(reviewReportRoute.includes('getVerifiedCustomer'));
 assert.ok(reviewReportRoute.includes("o.status='paid'"));
 assert.ok(adminReviewRoute.includes('isAdminRequest'));
 assert.ok(adminReviewRoute.includes("moderation_status=$2"));
+assert.ok(adminStockRoute.includes('isAdminRequest'));
+assert.ok(adminStockRoute.includes('FOR UPDATE'));
+assert.ok(adminStockRoute.includes('Variant stock cannot exceed the product total stock'));
+assert.ok(adminStockRoute.includes('Stock adjustments are temporarily unavailable'));
+assert.ok(adminStockRoute.includes('recordAdminActivity'));
+assert.ok(productsRoute.includes('ebnimaam_stock_movements'));
+assert.ok(productsRoute.includes('Product stock changed in the admin product editor'));
+assert.ok(productsRoute.includes('Variant stock changed in the admin product editor'));
+assert.ok(adminSettings.includes('/api/admin/stock-movements'));
+assert.ok(adminSettings.includes('movement history'));
 
 // The public app points to account sign-in for private tracking and official social follow links.
 assert.ok(storefront.includes('window.trackOrder'));
@@ -150,4 +162,4 @@ assert.ok(adminSettings.includes('/api/admin/product-questions'));
 assert.ok(adminSettings.includes('/api/admin/product-reviews'));
 
 new vm.Script(serviceWorker, { filename: 'public/service-worker.js' });
-process.stdout.write('Security headers, browser script syntax, verified customer access, support tickets, product questions, review reporting/moderation, single-device sessions, offline-cache boundaries, delivery pricing, and shop discovery smoke checks passed.\\n');
+process.stdout.write('Security headers, browser script syntax, verified customer access, support tickets, product questions, review reporting/moderation, single-device sessions, offline-cache boundaries, delivery pricing, shop discovery, and inventory movement safeguards smoke checks passed.\\n');
