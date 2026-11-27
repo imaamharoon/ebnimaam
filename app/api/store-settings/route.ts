@@ -4,10 +4,11 @@ import { isAdminRequest } from '../../../lib/admin-auth';
 import { recordAdminActivity } from '../../../lib/admin-audit';
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
-const defaultFees: Record<string, number> = {
-  Plateau:1500,'FCT - Abuja':3500,Kano:3500,Kaduna:3500,Nasarawa:3500,Bauchi:3500,
-  Lagos:4500,Ogun:4500,Oyo:4500,Rivers:4500,default:5000,
-};
+const NIGERIAN_STATES = new Set([
+  'Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno','Cross River','Delta','Ebonyi',
+  'Edo','Ekiti','Enugu','FCT - Abuja','Gombe','Imo','Jigawa','Kaduna','Kano','Katsina','Kebbi','Kogi',
+  'Kwara','Lagos','Nasarawa','Niger','Ogun','Ondo','Osun','Oyo','Plateau','Rivers','Sokoto','Taraba','Yobe','Zamfara'
+]);
 const WHATSAPP_CHANNEL_URL = 'https://whatsapp.com/channel/0029Vb7JXDL0VycOVg5oBv0N';
 const socialHosts: Record<string, string[]> = {
   instagram:['instagram.com'],
@@ -37,8 +38,8 @@ function normalizeSocialLinks(input: unknown) {
   return normalized;
 }
 const defaultSettings = {
-  storeName:'ebnimaam',country:'Nigeria',deliveryCountries:['Nigeria'],deliveryFeesByState:defaultFees,
-  pickupAddress:'Terminus Main Market, near the bus stop',pickupHours:'',holidayExceptions:'',deliveryRules:'',
+  storeName:'ebnimaam',country:'Nigeria',deliveryCountries:['Nigeria'],deliveryFeesByState:{},
+  pickupAddress:'',pickupHours:'',holidayExceptions:'',deliveryRules:'',
   supportEmail:'ebnimaam.com@gmail.com',supportPhone:'08145672755',lowStockThreshold:3,socialLinks:{whatsappChannel:WHATSAPP_CHANNEL_URL},
   returnsPolicy:'',privacyPolicy:'',terms:'',shippingPolicy:'',promotions:[],
 };
@@ -53,10 +54,8 @@ export async function GET(req: Request) {
     const settings = { ...defaultSettings, ...(result.rows[0]?.settings || {}) };
     settings.socialLinks = { ...defaultSettings.socialLinks, ...(settings.socialLinks || {}) };
     if (!String(settings.supportEmail || '').trim()) settings.supportEmail = defaultSettings.supportEmail;
-    if (!String(settings.pickupAddress || '').trim()) settings.pickupAddress = defaultSettings.pickupAddress;
     if (!String(settings.supportPhone || '').trim()) settings.supportPhone = defaultSettings.supportPhone;
-    if (!settings.deliveryFeesByState || typeof settings.deliveryFeesByState !== 'object') settings.deliveryFeesByState = defaultFees;
-    else settings.deliveryFeesByState = { ...defaultFees, ...settings.deliveryFeesByState };
+    if (!settings.deliveryFeesByState || typeof settings.deliveryFeesByState !== 'object' || Array.isArray(settings.deliveryFeesByState)) settings.deliveryFeesByState = {};
     if (!isAdminRequest(req)) {
       const { returnsPolicy, privacyPolicy, terms, shippingPolicy, ...publicSettings } = settings;
       return NextResponse.json({ settings: publicSettings, updated_at: result.rows[0]?.updated_at }, { headers: { 'cache-control': 'no-store' } });
@@ -72,10 +71,13 @@ export async function PUT(req: Request) {
     await init();
     const body = await req.json();
     const incomingFees = body.deliveryFeesByState && typeof body.deliveryFeesByState === 'object' ? body.deliveryFeesByState : {};
-    const deliveryFeesByState: Record<string, number> = { ...defaultFees };
+    const deliveryFeesByState: Record<string, number> = {};
     for (const [state, raw] of Object.entries(incomingFees)) {
       const value = Number(raw);
-      if (state !== 'default' && !Object.prototype.hasOwnProperty.call(defaultFees, state)) continue;
+      if (state !== 'default' && !NIGERIAN_STATES.has(state)) {
+        return NextResponse.json({ error: 'A delivery fee was supplied for an unsupported Nigerian state.' }, { status: 400 });
+      }
+      if (raw === '' || raw === null || raw === undefined) continue;
       if (!Number.isSafeInteger(value) || value < 0 || value > 50000) {
         return NextResponse.json({ error: 'Delivery fees must be whole naira amounts from ₦0 to ₦50,000.' }, { status: 400 });
       }
@@ -87,7 +89,7 @@ export async function PUT(req: Request) {
     const allowed = {
       ...defaultSettings,
       ...body,
-      pickupAddress: String(body.pickupAddress ?? defaultSettings.pickupAddress).trim().slice(0, 500) || defaultSettings.pickupAddress,
+      pickupAddress: String(body.pickupAddress ?? '').trim().slice(0, 500),
       pickupHours: String(body.pickupHours ?? '').trim().slice(0, 240),
       country:'Nigeria',
       deliveryCountries:['Nigeria'],
