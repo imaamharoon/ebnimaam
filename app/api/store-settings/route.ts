@@ -8,12 +8,14 @@ const defaultFees: Record<string, number> = {
   Plateau:1500,'FCT - Abuja':3500,Kano:3500,Kaduna:3500,Nasarawa:3500,Bauchi:3500,
   Lagos:4500,Ogun:4500,Oyo:4500,Rivers:4500,default:5000,
 };
+const WHATSAPP_CHANNEL_URL = 'https://whatsapp.com/channel/0029Vb7JXDL0VycOVg5oBv0N';
 const socialHosts: Record<string, string[]> = {
   instagram:['instagram.com'],
   facebook:['facebook.com','fb.com','fb.me'],
   tiktok:['tiktok.com'],
   youtube:['youtube.com','youtu.be'],
   x:['x.com','twitter.com'],
+  whatsappChannel:['whatsapp.com'],
 };
 function normalizeSocialLinks(input: unknown) {
   if (input == null) return {};
@@ -21,7 +23,7 @@ function normalizeSocialLinks(input: unknown) {
   const source = input as Record<string, unknown>;
   const normalized: Record<string, string> = {};
   for (const [platform, hosts] of Object.entries(socialHosts)) {
-    const value = String(source[platform] ?? '').trim();
+    const value = String(source[platform] ?? (platform === 'whatsappChannel' ? WHATSAPP_CHANNEL_URL : '')).trim();
     if (!value) continue;
     let url: URL;
     try { url = new URL(value); } catch { throw new Error('Enter a full HTTPS profile URL for ' + platform + '.'); }
@@ -37,7 +39,7 @@ function normalizeSocialLinks(input: unknown) {
 const defaultSettings = {
   storeName:'ebnimaam',country:'Nigeria',deliveryCountries:['Nigeria'],deliveryFeesByState:defaultFees,
   pickupAddress:'Terminus Main Market, near the bus stop',pickupHours:'',holidayExceptions:'',deliveryRules:'',
-  supportEmail:'ebnimaam.com@gmail.com',supportPhone:'08145672755',lowStockThreshold:3,socialLinks:{},
+  supportEmail:'ebnimaam.com@gmail.com',supportPhone:'08145672755',lowStockThreshold:3,socialLinks:{whatsappChannel:WHATSAPP_CHANNEL_URL},
   returnsPolicy:'',privacyPolicy:'',terms:'',shippingPolicy:'',promotions:[],
 };
 async function init() {
@@ -49,6 +51,7 @@ export async function GET(req: Request) {
     await init();
     const result = await pool.query('SELECT settings,updated_at FROM public.ebnimaam_store_settings WHERE id=1');
     const settings = { ...defaultSettings, ...(result.rows[0]?.settings || {}) };
+    settings.socialLinks = { ...defaultSettings.socialLinks, ...(settings.socialLinks || {}) };
     if (!String(settings.supportEmail || '').trim()) settings.supportEmail = defaultSettings.supportEmail;
     if (!String(settings.pickupAddress || '').trim()) settings.pickupAddress = defaultSettings.pickupAddress;
     if (!String(settings.supportPhone || '').trim()) settings.supportPhone = defaultSettings.supportPhone;
