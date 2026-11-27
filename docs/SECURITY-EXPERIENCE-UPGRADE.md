@@ -27,6 +27,15 @@ This release groups security hardening, customer experience improvements, and an
 - The database currently exposes one application database role with broad table privileges. Introduce a dedicated least-privilege runtime role only after runtime table creation/alteration is moved into reviewed migrations and the Vercel `DATABASE_URL` is rotated safely. Do not replace the existing credential before that work is complete.
 - The inspected Neon Free project has a six-hour history window and no scheduled snapshot backup. Automated snapshot schedules require an eligible paid plan; the Free plan includes one manual snapshot and snapshot storage is billed. This code release does not upgrade a plan, create a billable snapshot, or enable a paid backup schedule.
 
+## Preview environment isolation
+
+- A dedicated Neon database branch named `ebnimaam-security-preview-20261127` (ID `br-gentle-math-bg9o035j`) was created from the current main branch for this feature branch.
+- The preview branch has its own Neon Better Auth endpoint and the Vercel Git-branch-scoped `DATABASE_URL` and `NEON_AUTH_BASE_URL` variables are configured as preview-only values for `security-experience-upgrade-20261127`. The shared production `DATABASE_URL` has not been changed.
+- The preview origin was added to the isolated branch's Neon Auth trusted-origin list.
+- Neon Free rejected enabling branch-level protection because the plan has reached its protected-branch limit. The preview deployment remains behind Vercel team authentication. Do not distribute preview bypass links publicly.
+- The database branch is a point-in-time clone of production data and should be treated as sensitive. Only authorised project/team members should access it. Do not use real payment credentials or send test orders to production.
+- Re-deploy the latest Git commit after adding branch-scoped environment variables so the runtime receives the isolated database and Auth endpoint.
+
 ## Owner-level release tasks
 
 1. Authorize the correct Vercel team connection and inspect the preview build.
