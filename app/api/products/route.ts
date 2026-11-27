@@ -20,6 +20,17 @@ async function init() {
   await pool.query("CREATE TABLE IF NOT EXISTS public.ebnimaam_stock_movements(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),product_id TEXT NOT NULL,product_name TEXT NOT NULL,variant TEXT,old_qty INTEGER NOT NULL,new_qty INTEGER NOT NULL,delta INTEGER NOT NULL,reason TEXT NOT NULL,actor TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
   await pool.query("CREATE INDEX IF NOT EXISTS ebnimaam_stock_movements_created_idx ON public.ebnimaam_stock_movements(created_at DESC)");
 }
+
+let initPromise: Promise<void> | null = null;
+async function ensureInit() {
+  if (!initPromise) {
+    initPromise = init().catch((error) => {
+      initPromise = null;
+      throw error;
+    });
+  }
+  await initPromise;
+}
 function safeImage(value: unknown) {
   const image = String(value || '').trim();
   return image.startsWith('https://') || image.startsWith('data:image/');
@@ -56,13 +67,13 @@ function normalizeDetails(input: unknown) {
 }
 export async function GET(req: Request) {
   try {
-    await init();
+    await ensureInit();
     const admin = isAdminRequest(req);
     const columns = 'id,name,category,price,description,image,tag,sizes,stock,is_active,updated_at,gallery,size_stock,product_details';
     const result = admin
       ? await pool.query('SELECT ' + columns + ' FROM public.ebnimaam_products ORDER BY updated_at DESC')
       : await pool.query('SELECT ' + columns + ' FROM public.ebnimaam_products WHERE is_active=TRUE AND stock>0 ORDER BY updated_at DESC');
-    return NextResponse.json({ products: result.rows }, { headers: { 'cache-control': 'no-store' } });
+    return NextResponse.json({ products: result.rows }, { headers: { 'cache-control': admin ? 'no-store' : 'public, max-age=15, s-maxage=30, stale-while-revalidate=120' } });
   } catch {
     return NextResponse.json({ error: 'Product catalogue is temporarily unavailable.', products: [] }, { status: 503, headers: { 'cache-control': 'no-store' } });
   }
@@ -70,7 +81,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   if (!isAdminRequest(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
-    await init();
+    await ensureInit();
     const product = await req.json();
     const name = String(product.name || '').trim().slice(0, 160);
     const category = String(product.category || '').trim().slice(0, 80);

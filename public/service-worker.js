@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ebnimaam-shell-v7';
+const CACHE_NAME = 'ebnimaam-shell-v8';
 const CACHE_PREFIX = 'ebnimaam-shell-';
 const REQUIRED_SHELL = ['/store.html', '/offline.html', '/manifest.webmanifest'];
 const OPTIONAL_ASSETS = [

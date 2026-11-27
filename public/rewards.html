@@ -15,10 +15,11 @@
  <div id="status" class="notice" role="status">Checking your account…</div>
  <div id="rewardsApp" class="hidden">
   <div class="grid">
-   <section class="balance"><p>Available Ebnimaam balance</p><div id="balance" class="amount">₦0</div><p id="reserved" class="muted">₦0 reserved for bank refund requests</p><p>Use available wallet credit at checkout, or request a bank refund.</p></section>
-   <section class="card"><h2>Referral rewards</h2><p>Invite five different people. Each must complete a real, verified paid order. Their reward is credited after their own first paid order; your referral milestone reward unlocks after all five purchases are verified.</p><div class="row"><span class="pill" id="referralProgress">0 / 5 paid referrals</span></div><div class="field"><label>Your referral code</label><input id="referralCode" readonly></div><div class="row"><button class="btn" id="copyReferral">Copy referral code</button><button class="btn alt" id="shareReferral">Share invite</button></div><div id="rewardAmounts" class="muted"></div><form id="claimReferral"><div class="field"><label>Have a friend's referral code?</label><input id="claimCode" maxlength="30" placeholder="Enter code before your first paid order"></div><button class="btn alt">Apply referral code</button></form></section>
+   <section class="balance"><p>Available Ebnimaam balance</p><div id="balance" class="amount">₦0</div><p id="reserved" class="muted">₦0 reserved for bank refund requests</p><p>Use your Ebnimaam balance at checkout. Rewards cannot be transferred to another account or withdrawn as cash.</p></section>
+   <section class="card"><h2>Referral rewards</h2><p>Invite five different people. You earn ₦200 when each person completes their first verified paid purchase, building to ₦1,000 after five successful referrals. Rewards are store credit for Ebnimaam checkout only.</p><div class="row"><span class="pill" id="referralProgress">0 / 5 paid referrals</span></div><div class="field"><label>Your referral code</label><input id="referralCode" readonly></div><div class="row"><button class="btn" id="copyReferral">Copy referral code</button><button class="btn alt" id="copyReferralLink">Copy invite link</button><button class="btn alt" id="shareReferral">Share invite</button></div><div id="rewardAmounts" class="muted"></div><form id="claimReferral"><div class="field"><label>Have a friend's referral code?</label><input id="claimCode" maxlength="30" placeholder="Enter code before your first paid order"></div><button class="btn alt">Apply referral code</button></form></section>
   </div>
-  <section class="card"><h2>Request a bank refund</h2><p class="muted">Any approved refund can be placed in your Ebnimaam balance. Ask for a bank transfer here; the amount stays reserved until an administrator confirms the manual bank transfer.</p>
+  <section class="card" id="dailyGame"><h2>Daily Pattern Challenge</h2><p class="muted" id="gameRewardText">Solve the number pattern to earn store-only credit. One reward per day; up to three attempts.</p><div id="gameStatus" class="notice" role="status">Ready when you are. Start a new challenge to reveal the sequence.</div><p id="gameSequence" style="font-size:21px;font-weight:700;letter-spacing:.08em;color:var(--navy)"></p><div id="gameOptions" class="row"></div><button class="btn" id="gameStart" type="button">Start challenge</button></section>
+  <section class="card"><h2>Request a bank refund</h2><p class="muted">Only approved refund credits can be requested for a manual bank refund. Referral and game rewards remain in your Ebnimaam balance and can only be used at checkout.</p>
    <form id="bankRefund"><div class="grid"><div class="field"><label>Amount (₦)</label><input id="refundAmount" type="number" min="1" step="1" required></div><div class="field"><label>Bank name</label><input id="bankName" maxlength="80" required></div><div class="field"><label>Account name</label><input id="accountName" maxlength="100" required></div><div class="field"><label>10-digit account number</label><input id="accountNumber" inputmode="numeric" pattern="[0-9]{10}" maxlength="10" required></div></div><button class="btn">Request bank refund</button></form>
    <div id="withdrawals"></div>
   </section>
@@ -40,7 +41,7 @@
  async function call(action,payload){
   const response=await fetch('/api/loyalty',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action,...payload})});
   const data=await response.json().catch(()=>({}));
-  if(!response.ok)throw new Error(data.error||'This action could not be completed.');
+  if(!response.ok){const error=new Error(data.error||'This action could not be completed.');error.status=response.status;throw error;}
   return data;
  }
  function addCalendar(team){
@@ -57,7 +58,7 @@
   $('reserved').textContent=money(data.wallet?.reservedKobo)+' reserved for pending bank refunds';
   $('referralCode').value=data.referral?.code||'';
   $('referralProgress').textContent=(data.referral?.qualified||0)+' / 5 paid referrals';
-  $('rewardAmounts').textContent='Reward after your friend's first paid order: '+money(data.referral?.referredRewardKobo)+' · Your reward at five verified paid referrals: '+money(data.referral?.referrerRewardKobo);
+  $('rewardAmounts').textContent='Earn '+money(data.referral?.referrerRewardKobo)+' for each verified referral purchase · Five successful purchases = '+money(Number(data.referral?.referrerRewardKobo||0)*5)+'. Store credit only.';$('gameRewardText').textContent='A correct daily puzzle earns '+money(data.referral?.gameRewardKobo)+' in store credit. It can only be used at Ebnimaam checkout.';
   $('ledger').innerHTML=(data.ledger||[]).length?data.ledger.map(item=>'<div class="ledger"><div><b>'+esc(item.description||item.entry_type)+'</b><div class="muted">'+esc(new Date(item.created_at).toLocaleString())+'</div></div><strong class="'+(item.direction==='credit'?'credit':'debit')+'">'+(item.direction==='credit'?'+':'−')+money(item.amount_kobo)+'</strong></div>').join(''):'<p class="muted">Your wallet activity will appear here.</p>';
   $('withdrawals').innerHTML=(data.withdrawals||[]).map(item=>'<p class="notice">Bank refund request · '+money(item.amount_kobo)+' · '+esc(item.status)+' '+esc(item.admin_note||'')+'</p>').join('');
   $('challenges').innerHTML=(data.challenges||[]).length?data.challenges.map(item=>'<article class="team"><h3>'+esc(item.title)+'</h3><p>'+esc(item.description)+'</p><p><span class="pill">'+Number(item.duration_days)+' days</span> <span class="pill">Team of 2–'+Number(item.max_team_size)+'</span> <span class="pill">'+money(item.reward_kobo)+' per member</span></p><button class="btn" data-create-team="'+esc(item.id)+'">Create a team</button></article>').join(''):'<p class="muted">New team challenges will appear here when the store administrator publishes them.</p>';
@@ -83,8 +84,36 @@
    render(data);
   }catch(error){message((error.message||'Sign in to view rewards.')+' Open your account to continue: '+location.origin+'/account.html')}
  }
+ $('copyReferralLink').addEventListener('click',async()=>{const code=$('referralCode').value;const url=location.origin+'/store.html?ref='+encodeURIComponent(code);try{await navigator.clipboard.writeText(url);message('Your Ebnimaam invite link has been copied.')}catch{message(url)}});
+   let activeGame=null;
+  async function startDailyGame(){
+   const button=$('gameStart');button.disabled=true;$('gameOptions').innerHTML='';$('gameSequence').textContent='';
+   try{
+    const response=await fetch('/api/game',{credentials:'same-origin',cache:'no-store'}),data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(data.error||'The daily challenge is unavailable.');
+    if(data.rewardedToday){$('gameRewardText').textContent='You have already earned today’s game reward. Come back tomorrow.';$('gameStatus').textContent='Daily reward received. Your credit is ready to use at checkout.';return}
+    activeGame=data;$('gameSequence').textContent=(data.sequence||[]).join('  ·  ')+'  ·  ?';
+    $('gameRewardText').textContent='Correct answer reward: '+money(data.rewardKobo)+' store credit. Attempts remaining today: '+Number(data.attemptsLeft||0)+'.';
+    $('gameStatus').textContent='Choose the next number in the sequence.';
+    $('gameOptions').innerHTML=(data.options||[]).map(value=>'<button class="btn alt" type="button" data-game-answer="'+Number(value)+'">'+Number(value)+'</button>').join('');
+   }catch(error){$('gameStatus').textContent=error.message||'Could not start the challenge.'}
+   finally{button.disabled=false}
+  }
+  $('gameStart').addEventListener('click',startDailyGame);
+  $('gameOptions').addEventListener('click',async event=>{
+   const button=event.target.closest('[data-game-answer]');if(!button||!activeGame)return;
+   $('gameOptions').querySelectorAll('button').forEach(item=>item.disabled=true);
+   try{
+    const response=await fetch('/api/game',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({attemptId:activeGame.attemptId,answer:Number(button.dataset.gameAnswer)})});
+    const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'The answer could not be checked.');
+    activeGame=null;$('gameSequence').textContent='';
+    if(data.correct){$('gameStatus').textContent=data.rewardKobo>0?'Correct. '+money(data.rewardKobo)+' has been added to your store-only Ebnimaam balance.':(data.alreadyRewarded?'Correct. Today’s reward has already been claimed.':'Correct. Your answer is right.');}
+    else $('gameStatus').textContent='Not quite. The correct answer was '+Number(data.answer)+'. Start another challenge while today’s attempts remain.';
+    $('gameOptions').innerHTML='';await load();
+   }catch(error){$('gameStatus').textContent=error.message||'Could not check your answer.';$('gameOptions').querySelectorAll('button').forEach(item=>item.disabled=false)}
+  });
  $('copyReferral').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('referralCode').value);message('Referral code copied.')}catch{ $('referralCode').select();message('Select and copy your referral code.')}});
- $('shareReferral').addEventListener('click',async()=>{const code=$('referralCode').value;const url=location.origin+'/rewards.html?ref='+encodeURIComponent(code);const text='Join me on Ebnimaam. Use my referral code '+code+' before your first paid order: '+url;try{if(navigator.share)await navigator.share({title:'Ebnimaam referral',text,url});else{await navigator.clipboard.writeText(text);message('Referral invite copied.')}}catch{}});
+ $('shareReferral').addEventListener('click',async()=>{const code=$('referralCode').value;const url=location.origin+'/store.html?ref='+encodeURIComponent(code);const text='Join me on Ebnimaam. Open the app, create your account and complete your first paid order using my invite: '+url;try{if(navigator.share)await navigator.share({title:'Ebnimaam referral',text,url});else{await navigator.clipboard.writeText(text);message('Referral invite copied.')}}catch{}});
  $('claimReferral').addEventListener('submit',async event=>{event.preventDefault();try{const result=await call('claim-referral',{code:$('claimCode').value});message(result.message);await load()}catch(e){message(e.message)}});
  $('joinTeam').addEventListener('submit',async event=>{event.preventDefault();try{await call('join-team',{inviteCode:$('teamInvite').value});message('You have joined the team.');$('teamInvite').value='';await load()}catch(e){message(e.message)}});
  $('bankRefund').addEventListener('submit',async event=>{event.preventDefault();try{const result=await call('request-bank-refund',{amountKobo:Number($('refundAmount').value)*100,bankName:$('bankName').value,accountName:$('accountName').value,accountNumber:$('accountNumber').value});message(result.message);$('bankRefund').reset();await load()}catch(e){message(e.message)}});

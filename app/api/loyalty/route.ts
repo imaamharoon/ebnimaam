@@ -16,6 +16,14 @@ export async function GET(req: Request) {
     if (!user) return NextResponse.json({ error: 'Sign in with your verified account to view Ebnimaam Rewards.' }, { status: 401 });
     await ensureLoyaltySchema(pool);
     await pool.query(
+      `INSERT INTO public.ebnimaam_customer_profiles(user_id,email,full_name)
+       VALUES($1,$2,$3)
+       ON CONFLICT(user_id) DO UPDATE SET email=EXCLUDED.email,
+       full_name=CASE WHEN COALESCE(EXCLUDED.full_name,'')<>'' THEN EXCLUDED.full_name ELSE public.ebnimaam_customer_profiles.full_name END,
+       updated_at=NOW()`,
+      [user.id,user.email,user.name||''],
+    );
+    await pool.query(
       'INSERT INTO public.ebnimaam_referral_codes(user_id,code) VALUES($1,$2) ON CONFLICT(user_id) DO NOTHING',
       [user.id,'EBN'+inviteCode()],
     );
@@ -41,7 +49,7 @@ export async function GET(req: Request) {
          WHERE mine.user_id=$1 ORDER BY t.created_at DESC LIMIT 30`,[user.id]),
       walletBalance(pool,user.id),
       walletAvailable(pool,user.id),
-      pool.query('SELECT referred_reward_kobo,referrer_reward_kobo FROM public.ebnimaam_loyalty_settings WHERE id=1'),
+      pool.query('SELECT referred_reward_kobo,referrer_reward_kobo,game_reward_kobo FROM public.ebnimaam_loyalty_settings WHERE id=1'),
     ]);
     const pending = await pool.query(
       "SELECT COALESCE(SUM(amount_kobo),0)::bigint AS amount FROM public.ebnimaam_wallet_withdrawals WHERE user_id=$1 AND status='pending'",
@@ -49,7 +57,7 @@ export async function GET(req: Request) {
     );
     return NextResponse.json({
       wallet:{balanceKobo:balance,reservedKobo:Math.max(0,balance-available),availableKobo:available},
-      referral:{code:code.rows[0]?.code||'',total:Number(referrals.rows[0]?.total||0),qualified:Number(referrals.rows[0]?.qualified||0),required:5,referredRewardKobo:Number(settings.rows[0]?.referred_reward_kobo||0),referrerRewardKobo:Number(settings.rows[0]?.referrer_reward_kobo||0)},
+      referral:{code:code.rows[0]?.code||'',total:Number(referrals.rows[0]?.total||0),qualified:Number(referrals.rows[0]?.qualified||0),required:5,referredRewardKobo:Number(settings.rows[0]?.referred_reward_kobo||0),referrerRewardKobo:Number(settings.rows[0]?.referrer_reward_kobo||0),gameRewardKobo:Number(settings.rows[0]?.game_reward_kobo||5000)},
       ledger:ledger.rows,withdrawals:withdrawals.rows,challenges:challenges.rows,teams:teams.rows,
     },{headers:{'cache-control':'no-store'}});
   } catch {
@@ -160,6 +168,16 @@ export async function POST(req: Request) {
         await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[user.id]);
         const available=await walletAvailable(client,user.id);
         if(amountKobo>available) throw new Error('The requested amount is higher than your available Ebnimaam balance after checkout and refund reservations.');
+        const refundable=await client.query(
+          `SELECT GREATEST(0,
+             COALESCE((SELECT SUM(CASE WHEN direction='credit' THEN amount_kobo ELSE -amount_kobo END)
+                       FROM public.ebnimaam_wallet_ledger WHERE user_id=$1 AND entry_type='refund_credit'),0)
+             - COALESCE((SELECT SUM(amount_kobo) FROM public.ebnimaam_wallet_withdrawals WHERE user_id=$1 AND status='pending'),0)
+           )::bigint AS amount`,
+          [user.id],
+        );
+        if(amountKobo>Number(refundable.rows[0]?.amount||0))
+          throw new Error('Only approved refund credits can be requested for a bank refund. Referral and game rewards are store-only credits and cannot be transferred or withdrawn.');
         await client.query(
           `INSERT INTO public.ebnimaam_wallet_withdrawals(user_id,amount_kobo,bank_details)
            VALUES($1,$2,$3::jsonb)`,
