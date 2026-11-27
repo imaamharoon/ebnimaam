@@ -84,7 +84,7 @@ The owner manages order progress in Admin → Orders:
 - Fulfilment cannot move into preparation/dispatch/collection before Paystack payment is verified.
 - Delivery tracking partner, reference and HTTPS courier URL can be saved on each delivery order. The customer tracking page also shows the store's progress timeline and refreshes automatically while opened.
 
-Customer order emails are sent for initial pending status, successful payment/processing, payment failure, picked items, dispatch, delivery, ready for pickup, collection and cancellation. A private HMAC-signed tracking link is included in each email; it expires after 90 days. Notification events are logged and de-duplicated so repeated admin saves do not repeatedly email customers. Admin can inspect notification delivery history and retry the current status notification.
+Customer order emails are triggered for initial pending status, successful payment/processing, payment failure, picked items, dispatch, delivery, ready for pickup, collection and cancellation. Each message links to the sign-in-required order page; private order details are only shown after the customer's verified account and active device-bound session are checked. Notification events are logged and de-duplicated so repeated admin saves do not repeatedly email customers. Admin can inspect provider-acceptance history and retry a failed/current-status notification. A provider-accepted message is not proof of inbox delivery.
 
 ### Transactional email provider
 
@@ -127,7 +127,7 @@ The admin dashboard refreshes order and inventory data periodically and shows ac
 ## Account security and private order access
 
 - Customer accounts use one active Ebnimaam app session per account. A sign-in from a second device replaces the previous app session, and a browser/app installation cannot keep two customer accounts active at once.
-- New devices are recorded; a security email is not considered active until the app explicitly sends and logs that alert through the configured Resend API. Do not treat session recording alone as an email notification.
+- First sign-ins and newly recognised devices are recorded and trigger a Resend security alert to the verified account email. The security-event log records whether Resend accepted the alert; it requires `RESEND_API_KEY` and `EMAIL_FROM` and does not by itself confirm inbox delivery.
 - Checkout, customer profile reads/updates, payment-return verification, saved reviews and order tracking check the active device-bound customer session. An order reference or email address alone cannot reveal private order details.
 - The storefront includes a refresh control, mobile history-aware account/cart/checkout overlays and the owner-provided WhatsApp Channel follow link. Additional social handles are managed in Admin → Store settings.
 
