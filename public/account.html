@@ -18,7 +18,56 @@ $('resendEmailCode').addEventListener('click',async()=>{if(!pendingVerificationE
 async function checkSession(){try{const r=await fetch('/api/auth/get-session',{credentials:'same-origin',cache:'no-store'});if(!r.ok)throw new Error('Unable to check your sign-in status.');const d=await r.json();currentUser=(d.user&&d.user.emailVerified===true)?d.user:null;if(currentUser){$('authCard').classList.add('hide');$('welcomeCard').classList.add('hide');$('accountCard').classList.remove('hide');$('profile').innerHTML='<b>'+escapeHtml(currentUser.name||'Ebnimaam customer')+'</b><br>'+escapeHtml(currentUser.email||'');loadProfile();if(window.parent!==window)window.parent.postMessage({type:'ebnimaam-account-authenticated'},location.origin)}else{$('accountCard').classList.add('hide');$('authCard').classList.remove('hide')}}catch(e){currentUser=null;$('accountCard').classList.add('hide');$('welcomeCard').classList.add('hide');$('authCard').classList.remove('hide');notice('We could not check your session. You can try signing in again or reload the page.')}}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function social(provider){try{const r=await fetch('/api/auth/sign-in/social',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({provider,callbackURL:location.origin+'/account.html'})});const d=await r.json();if(!r.ok)throw new Error(d.message||d.error||'Social sign-in is unavailable.');if(d.url)location.href=d.url;else notice('Could not start Google sign-in.')}catch(e){notice(e.message)}}
-async function loadProfile(){try{const r=await fetch('/api/customer/profile',{credentials:'same-origin',cache:'no-store'});if(!r.ok)return;const d=await r.json(),p=d.profile||{},a=(p.addresses||[])[0]||{};const orders=d.orders||[];$('orderHistory').innerHTML=orders.length?orders.map(o=>'<div style="padding:10px 0;border-bottom:1px solid var(--line)"><b>'+escapeHtml(o.reference)+'</b><br><small>'+escapeHtml(new Date(o.created_at).toLocaleDateString())+' · '+escapeHtml(o.status||'pending')+' · ₦'+(Number(o.amount_kobo||0)/100).toLocaleString()+'</small></div>').join(''):'<p>No orders are linked to this email yet.</p>';$('profileName').value=p.full_name||currentUser?.name||'';$('profilePhone').value=p.phone||a.phone||'';$('addressLine1').value=a.line1||'';$('addressLine2').value=a.line2||'';$('addressCity').value=a.city||'';$('addressState').value=a.state||'';$('addressCountry').value=a.country||'Nigeria'}catch{}}
+async function loadProfile(){
+ try{
+  const r=await fetch('/api/customer/profile',{credentials:'same-origin',cache:'no-store'});if(!r.ok)return;
+  const d=await r.json(),p=d.profile||{},a=(p.addresses||[])[0]||{},orders=Array.isArray(d.orders)?d.orders:[];
+  window.ebnimaamCustomerOrders=orders;
+  $('orderHistory').innerHTML=orders.length?orders.map((o,index)=>{
+   const reference=escapeHtml(o.reference||'Order');
+   const status=String(o.status||'pending').toLowerCase();
+   const history=Array.isArray(o.history)?o.history:[];
+   const timeline=history.length?'<div style="margin:8px 0 0 10px;padding-left:12px;border-left:2px solid var(--line)">'+history.map(event=>'<p style="margin:5px 0;font-size:12px"><b>'+escapeHtml(event.status||'Update')+'</b> · '+escapeHtml(new Date(event.created_at).toLocaleString())+(event.note?' · '+escapeHtml(event.note):'')+'</p>').join('')+'</div>':'';
+   const reorder=status==='paid'?'<button type="button" class="btn" data-reorder-index="'+index+'" style="margin-top:9px;width:auto;padding:9px 14px">Reorder these items</button>':'';
+   return '<article style="padding:12px 0;border-bottom:1px solid var(--line)"><b>'+reference+'</b><br><small>'+escapeHtml(new Date(o.created_at).toLocaleDateString())+' · '+escapeHtml(status)+' · ₦'+(Number(o.amount_kobo||0)/100).toLocaleString()+'</small>'+timeline+reorder+'</article>';
+  }).join(''):'<p>No orders are linked to this email yet.</p>';
+  $('orderHistory').querySelectorAll('[data-reorder-index]').forEach(button=>button.addEventListener('click',()=>reorderPaidOrder(Number(button.dataset.reorderIndex))));
+  $('profileName').value=p.full_name||currentUser?.name||'';$('profilePhone').value=p.phone||a.phone||'';
+  $('addressLine1').value=a.line1||'';$('addressLine2').value=a.line2||'';$('addressCity').value=a.city||'';$('addressState').value=a.state||'';$('addressCountry').value=a.country||'Nigeria';
+ }catch{}
+}
+async function reorderPaidOrder(index){
+ const orders=Array.isArray(window.ebnimaamCustomerOrders)?window.ebnimaamCustomerOrders:[];
+ const order=orders[index];
+ if(!currentUser?.id||!order||String(order.status||'').toLowerCase()!=='paid'){notice('Only a verified paid order can be reordered.',true);return}
+ let originalItems=order.items;
+ if(typeof originalItems==='string'){try{originalItems=JSON.parse(originalItems)}catch{originalItems=[]}}
+ if(!Array.isArray(originalItems)||!originalItems.length){notice('This order has no saved product selections to reorder.',true);return}
+ try{
+  const savedResponse=await fetch('/api/customer/cart',{credentials:'same-origin',cache:'no-store'});
+  const savedData=await savedResponse.json().catch(()=>({}));
+  if(!savedResponse.ok||String(savedData.userId||'')!==String(currentUser.id))throw new Error(savedData.error||'Your saved bag could not be verified. Please sign in again.');
+  const lines=new Map();
+  const add=(item,includeOnlyValidShape)=>{
+   const productId=String(item?.productId||'').trim().slice(0,120),size=String(item?.size||'One Size').trim().slice(0,40),color=String(item?.color||'').trim().slice(0,60),qty=Number(item?.qty);
+   if(!productId||!size||!Number.isSafeInteger(qty)||qty<1||qty>10)return;
+   const key=JSON.stringify([productId,size,color]),prior=lines.get(key);
+   lines.set(key,{productId,size,color,qty:Math.min(10,qty+(prior?.qty||0))});
+  };
+  (Array.isArray(savedData.items)?savedData.items:[]).forEach(item=>add(item));
+  originalItems.forEach(item=>add(item));
+  const merged=Array.from(lines.values()).slice(0,30);
+  if(!merged.length)throw new Error('No valid product options were available in this order.');
+  const saveResponse=await fetch('/api/customer/cart',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:merged})});
+  const saveData=await saveResponse.json().catch(()=>({}));
+  if(!saveResponse.ok)throw new Error(saveData.error||'Some products or sizes may no longer be available. Refresh the order and try again.');
+  localStorage.setItem('ebnimaam_cart',JSON.stringify(merged));
+  localStorage.setItem('ebnimaam_cart_owner',String(currentUser.id));
+  notice('The paid order items have been added to your saved bag. Current prices and stock will be checked in the shop.',true);
+  if(window.parent!==window){window.parent.postMessage({type:'ebnimaam-account-reorder'},location.origin)}
+  else window.location.href='/store.html#shop';
+ }catch(error){notice(error?.message||'Could not restore this order to your bag.',true)}
+}
 $('profileForm').addEventListener('submit',async e=>{e.preventDefault();const full_name=$('profileName').value.trim(),phone=$('profilePhone').value.trim(),line1=$('addressLine1').value.trim(),city=$('addressCity').value.trim(),state=$('addressState').value.trim();const addresses=line1?[{label:'Home',recipient:full_name,phone,line1,line2:$('addressLine2').value.trim(),city,state,country:$('addressCountry').value.trim()||'Nigeria'}]:[];try{const r=await fetch('/api/customer/profile',{method:'PUT',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({full_name,phone,addresses})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Save failed');notice('Your details have been saved securely for your next login.',true)}catch(e){notice(e.message,true)}});
 function togglePassword(button){const p=$('password');const show=p.type==='password';p.type=show?'text':'password';button.textContent=show?'Hide password':'Show password'}
 async function resetPassword(){const email=$('authForm').elements.email.value;if(!email)return notice('Enter your email address first.');try{const r=await fetch('/api/auth/request-password-reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email,redirectTo:location.origin+'/account.html?reset=1'})});if(!r.ok)throw new Error('Could not send the reset email.');notice('If an account exists for this email, password reset instructions will be sent.')}catch(e){notice(e.message)}}
