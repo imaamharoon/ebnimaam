@@ -92,15 +92,28 @@ export async function PATCH(req: Request) {
       }
     }
     try {
-      const updated = await pool.query(
-        "UPDATE public.ebnimaam_orders SET address=COALESCE(address,'{}'::jsonb) || $1::jsonb,updated_at=NOW() WHERE reference=$2 RETURNING fulfilment_status",
-        [JSON.stringify({ tracking_carrier: carrier, tracking_code: trackingCode, tracking_url: trackingUrl || '' }), reference],
-      );
-      if (!updated.rowCount) return NextResponse.json({ error: 'Order not found.' }, { status: 404 });
-      await pool.query(
-        'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
-        [reference, 'tracking_updated', 'Courier tracking information updated.', 'admin'],
-      );
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const updated = await client.query(
+          "UPDATE public.ebnimaam_orders SET address=COALESCE(address,'{}'::jsonb) || $1::jsonb,updated_at=NOW() WHERE reference=$2 RETURNING fulfilment_status",
+          [JSON.stringify({ tracking_carrier: carrier, tracking_code: trackingCode, tracking_url: trackingUrl || '' }), reference],
+        );
+        if (!updated.rowCount) {
+          await client.query('ROLLBACK');
+          return NextResponse.json({ error: 'Order not found.' }, { status: 404 });
+        }
+        await client.query(
+          'INSERT INTO public.ebnimaam_order_status_history(reference,status,note,changed_by) VALUES($1,$2,$3,$4)',
+          [reference, 'tracking_updated', 'Courier tracking information updated.', 'admin'],
+        );
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
       await recordAdminActivity('order.tracking.updated', 'order', reference, { carrier: carrier || null, hasTrackingUrl: Boolean(trackingUrl), hasTrackingCode: Boolean(trackingCode) });
       return NextResponse.json({ ok: true, trackingCarrier: carrier, trackingCode, trackingUrl });
     } catch {
