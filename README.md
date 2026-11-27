@@ -88,19 +88,22 @@ Customer order emails are triggered for initial pending status, successful payme
 
 ### Transactional email provider
 
-Resend is the primary provider for customer order and security notifications. Brevo is an optional API fallback when Resend is not configured. The app sends through HTTPS APIs; it does not use Gmail SMTP or store mail passwords.
+Gmail SMTP is the preferred sender for Ebnimaam customer order notifications and first-sign-in/new-device security alerts. The application uses Gmail when `SMTP_USER` and `SMTP_PASS` are present; Resend and Brevo remain optional API fallbacks. Use a Google App Password, not your normal Google account password.
 
-Configure these encrypted environment variables in the canonical Vercel project for Production (and Preview only when the preview is isolated):
-- `RESEND_API_KEY` — a Resend API key with permission to send mail.
-- `EMAIL_FROM` — a sender address on a domain verified in Resend, for example `Ebnimaam <orders@your-verified-domain>`.
+Configure these encrypted, server-only Vercel environment variables for Production (and Preview only when the preview is isolated):
+- `SMTP_HOST` — `smtp.gmail.com`.
+- `SMTP_PORT` — `465` (SSL) or `587` (STARTTLS).
+- `SMTP_USER` — the full Gmail address used by Ebnimaam.
+- `SMTP_PASS` — a Google App Password generated for that account. Never commit or share it in chat.
+- `EMAIL_FROM` — for example `Ebnimaam <your-gmail-address@gmail.com>`; it must use the authenticated Gmail address or a Send mail as alias already authorised in Gmail.
 - `AUTH_SECRET` — a long, random server-only secret used for signed security tokens and private order-tracking functions.
-- `BREVO_API_KEY` — optional; used only when `RESEND_API_KEY` is absent.
+- `RESEND_API_KEY` and `BREVO_API_KEY` — optional API fallbacks, not required when Gmail SMTP is configured.
 
-Keep API keys and secrets out of GitHub, source code, browser code and chat. Do not use a Gmail account password or app password as the mail-provider credential. Confirm the Resend domain's DNS verification (including SPF/DKIM), then send a controlled test to the store owner's inbox and confirm it appears in the provider's message logs. The email notification event log records provider acceptance; it does not prove inbox delivery.
+Never put email credentials in GitHub, source code, browser code or chat. A provider accepting a message is not proof that it reached the inbox; perform a controlled test to the store owner's address and inspect the Gmail mailbox, spam folder and server event log.
 
-Customer registration OTP, email verification and password-reset messages are sent by Neon Managed Auth, not by the order-notification API. Configure Neon Auth's custom SMTP settings separately with Resend's SMTP endpoint: host `smtp.resend.com`, port `465` (SSL) or `587` (STARTTLS), username `resend`, and the Resend API key as the password. Use a sender address verified in Resend. Test signup OTP, resend-code and password-reset flows separately; do not change the existing signup/session code as part of mail-provider setup.
+Customer registration OTP, email verification and password-reset messages are sent by Neon Managed Auth, not by the order-notification API. They use a separate Neon Auth SMTP setting. To send those through the same Gmail account, configure Neon Auth's custom SMTP host `smtp.gmail.com`, port `465`, username equal to `SMTP_USER`, and password equal to the Google App Password. Keep the existing signup/session code unchanged and test OTP, resend verification and password-reset separately before relying on the change.
 
-The customer authentication proxy calls `activateCustomerSession()` after verified sign-in and email verification. That records first sign-ins/new devices and sends a Resend security alert when `RESEND_API_KEY` and `EMAIL_FROM` are configured; the security-event table records provider acceptance, not inbox delivery.
+The customer authentication proxy calls `activateCustomerSession()` after verified sign-in and email verification. That records first sign-ins/new devices and sends the security alert through Gmail SMTP when `SMTP_USER` and `SMTP_PASS` are configured; otherwise the optional Resend fallback is used. The security-event table records provider acceptance, not inbox delivery.
 
 The internal tracking page shows database status history and checks for updates every 30 seconds while the private link is open. Customers can also use the existing order-reference plus checkout-email lookup as a fallback. It is not a courier GPS feed. For map-based live location, a delivery partner API or rider location integration is required; a secure courier tracking URL can be saved per order in Admin.
 
