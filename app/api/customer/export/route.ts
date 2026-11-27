@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { createTextPdf } from '../../../../lib/pdf';
+import { isCurrentCustomerSession } from '../../../../lib/customer-sessions';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const pool=new Pool({connectionString:process.env.DATABASE_URL,max:5});
@@ -10,6 +11,7 @@ async function customer(req:Request){
  const response=await fetch(authBase+'/get-session',{headers:{cookie,origin:new URL(req.url).origin},cache:'no-store'});
  if(!response.ok)return null;const data=await response.json();const user=data?.user;
  if(!user?.id||!user?.email||user.emailVerified!==true)return null;
+ if(!(await isCurrentCustomerSession(req,String(user.id))))return null;
  return user as {id:string;email:string;name?:string;emailVerified?:boolean};
 }
 export async function GET(req:Request){
