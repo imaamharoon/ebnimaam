@@ -120,42 +120,49 @@ export async function verifyAndReconcilePaystack(
         }
       }
 
-      let productsById = new Map<string, any>();
+      // Build sorted key arrays with Map.forEach so this compiles with the
+      // repository's existing TypeScript target (which does not downlevel Map iteration).
+      const productIds: string[] = [];
+      const sizeKeys: string[] = [];
+      productTotals.forEach((_quantity, productId) => productIds.push(productId));
+      sizeTotals.forEach((_quantity, key) => sizeKeys.push(key));
+      productIds.sort();
+
+      const productsById = new Map<string, any>();
       if (!stockIssue) {
-        const productIds = Array.from(productTotals.keys()).sort();
         const stockRows = await client.query(
           'SELECT id,stock,size_stock FROM public.ebnimaam_products WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',
           [productIds],
         );
-        productsById = new Map<string, any>();
-        for (const row of stockRows.rows as any[]) productsById.set(String(row.id), row);
+        for (let i = 0; i < stockRows.rows.length; i++) {
+          const row = stockRows.rows[i];
+          productsById.set(String(row.id), row);
+        }
         if (productsById.size !== productIds.length) stockIssue = true;
 
-        for (const [productId, quantity] of productTotals) {
+        for (let i = 0; i < productIds.length && !stockIssue; i++) {
+          const productId = productIds[i];
+          const quantity = productTotals.get(productId) || 0;
           const product: any = productsById.get(productId);
           const overallStock = Number(product?.stock);
           if (!product || !Number.isSafeInteger(overallStock) || overallStock < quantity) {
             stockIssue = true;
-            break;
           }
         }
 
-        if (!stockIssue) {
-          for (const [key, quantity] of sizeTotals) {
-            const [productId, size] = JSON.parse(key) as [string, string];
-            const product: any = productsById.get(productId);
-            let sizeStock = product?.size_stock;
-            if (typeof sizeStock === 'string') {
-              try { sizeStock = JSON.parse(sizeStock); } catch { sizeStock = {}; }
-            }
-            if (sizeStock && typeof sizeStock === 'object' && !Array.isArray(sizeStock)
-              && Object.prototype.hasOwnProperty.call(sizeStock, size)) {
-              const available = Number(sizeStock[size]);
-              if (!Number.isSafeInteger(available) || available < quantity) {
-                stockIssue = true;
-                break;
-              }
-            }
+        for (let i = 0; i < sizeKeys.length && !stockIssue; i++) {
+          const key = sizeKeys[i];
+          const quantity = sizeTotals.get(key) || 0;
+          const [productId, size] = JSON.parse(key) as [string, string];
+          const product: any = productsById.get(productId);
+          let sizeStock = product?.size_stock;
+          if (typeof sizeStock === 'string') {
+            try { sizeStock = JSON.parse(sizeStock); } catch { sizeStock = {}; }
+          }
+          if (sizeStock && typeof sizeStock === 'object' && !Array.isArray(sizeStock)
+            && Object.prototype.hasOwnProperty.call(sizeStock, size)) {
+            const available = Number(sizeStock[size]);
+            if (!Number.isSafeInteger(available) || available < quantity) stockIssue = true;
           }
         }
       }
@@ -163,7 +170,9 @@ export async function verifyAndReconcilePaystack(
       if (!stockIssue) {
         // Products are locked in a stable order above. Decrement overall stock once
         // per product and each tracked size by its aggregated quantity in one transaction.
-        for (const [productId, totalQuantity] of productTotals) {
+        for (let i = 0; i < productIds.length; i++) {
+          const productId = productIds[i];
+          const totalQuantity = productTotals.get(productId) || 0;
           const product: any = productsById.get(productId);
           let sizeStock = product.size_stock;
           if (typeof sizeStock === 'string') {
@@ -172,10 +181,11 @@ export async function verifyAndReconcilePaystack(
           sizeStock = sizeStock && typeof sizeStock === 'object' && !Array.isArray(sizeStock)
             ? { ...sizeStock }
             : {};
-          for (const [key, quantity] of sizeTotals) {
+          for (let j = 0; j < sizeKeys.length; j++) {
+            const key = sizeKeys[j];
             const [groupProductId, size] = JSON.parse(key) as [string, string];
             if (groupProductId !== productId || !Object.prototype.hasOwnProperty.call(sizeStock, size)) continue;
-            sizeStock[size] = Number(sizeStock[size]) - quantity;
+            sizeStock[size] = Number(sizeStock[size]) - (sizeTotals.get(key) || 0);
           }
           await client.query(
             'UPDATE public.ebnimaam_products SET stock=stock-$1,size_stock=$2::jsonb,updated_at=NOW() WHERE id=$3',
