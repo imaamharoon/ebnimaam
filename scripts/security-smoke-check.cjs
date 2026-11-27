@@ -19,6 +19,12 @@ const storeSettings = fs.readFileSync('app/api/store-settings/route.ts', 'utf8')
 const adminSettings = fs.readFileSync('app/admin/page.tsx', 'utf8');
 const productPageRoute = fs.readFileSync('public/product.html', 'utf8');
 const customerCartRoute = fs.readFileSync('app/api/customer/cart/route.ts', 'utf8');
+const customerSupportRoute = fs.readFileSync('app/api/customer/support/route.ts', 'utf8');
+const adminSupportRoute = fs.readFileSync('app/api/admin/support/route.ts', 'utf8');
+const productQuestionsRoute = fs.readFileSync('app/api/product-questions/route.ts', 'utf8');
+const adminProductQuestionsRoute = fs.readFileSync('app/api/admin/product-questions/route.ts', 'utf8');
+const reviewReportRoute = fs.readFileSync('app/api/product-reviews/report/route.ts', 'utf8');
+const adminReviewRoute = fs.readFileSync('app/api/admin/product-reviews/route.ts', 'utf8');
 
 assert.ok(config.includes("key: 'X-Content-Type-Options'") && config.includes("value: 'nosniff'"));
 assert.ok(config.includes("key: 'X-Frame-Options'") && config.includes("value: 'SAMEORIGIN'"));
@@ -106,6 +112,21 @@ assert.ok(!trackingRoute.includes('body?.email') && !trackingRoute.includes('bod
 assert.ok(paymentVerification.includes('getVerifiedCustomer'));
 assert.ok(paymentVerification.includes('owned.rowCount'));
 assert.ok(reviewRoute.includes('isCurrentCustomerSession'));
+assert.ok(reviewRoute.includes("moderation_status='published'"));
+assert.ok(customerSupportRoute.includes('getVerifiedCustomer'));
+assert.ok(customerSupportRoute.includes('WHERE t.user_id=$1'));
+assert.ok(customerSupportRoute.includes('WHERE id=$1 AND user_id=$2 FOR UPDATE'));
+assert.ok(customerSupportRoute.includes('customer-support-write'));
+assert.ok(adminSupportRoute.includes('isAdminRequest'));
+assert.ok(adminSupportRoute.includes('recordAdminActivity'));
+assert.ok(productQuestionsRoute.includes('getVerifiedCustomer'));
+assert.ok(productQuestionsRoute.includes("status='pending'"));
+assert.ok(adminProductQuestionsRoute.includes('isAdminRequest'));
+assert.ok(adminProductQuestionsRoute.includes('recordAdminActivity'));
+assert.ok(reviewReportRoute.includes('getVerifiedCustomer'));
+assert.ok(reviewReportRoute.includes("o.status='paid'"));
+assert.ok(adminReviewRoute.includes('isAdminRequest'));
+assert.ok(adminReviewRoute.includes("moderation_status=$2"));
 
 // The public app points to account sign-in for private tracking and official social follow links.
 assert.ok(storefront.includes('window.trackOrder'));
@@ -117,6 +138,16 @@ assert.ok(account.includes("fetch('/api/customer/cart'"));
 assert.ok(account.includes('savedData.userId'));
 assert.ok(account.includes("type:'ebnimaam-account-reorder'"));
 assert.ok(storefront.includes("type==='ebnimaam-account-reorder'"));
+assert.ok(account.includes('id="supportTicketForm"'));
+assert.ok(account.includes("fetch('/api/customer/support'"));
+assert.ok(account.includes('loadSupportTickets'));
+assert.ok(productPage.includes('id="productQuestionForm"'));
+assert.ok(productPage.includes("fetch(\"/api/product-questions\""));
+assert.ok(productPage.includes('data-report-review='));
+assert.ok(productPage.includes("fetch(\"/api/product-reviews/report\""));
+assert.ok(adminSettings.includes('/api/admin/support'));
+assert.ok(adminSettings.includes('/api/admin/product-questions'));
+assert.ok(adminSettings.includes('/api/admin/product-reviews'));
 
 new vm.Script(serviceWorker, { filename: 'public/service-worker.js' });
-process.stdout.write('Security headers, browser script syntax, account-bound order access, single-device sessions, offline-cache boundaries, delivery pricing, and shop comparison smoke checks passed.\\n');
+process.stdout.write('Security headers, browser script syntax, verified customer access, support tickets, product questions, review reporting/moderation, single-device sessions, offline-cache boundaries, delivery pricing, and shop discovery smoke checks passed.\\n');
