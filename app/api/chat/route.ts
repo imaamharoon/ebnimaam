@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { checkRateLimit } from '../../../lib/rate-limit';
 import { Pool } from 'pg';
 import { ensureLoyaltySchema, getVerifiedCustomer, walletAvailable } from '../../../lib/loyalty';
+import { ensureCouponsSchema } from '../../../lib/coupons';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -66,13 +67,25 @@ export async function POST(req: Request) {
     const apiKey = process.env.GEMINI_API_KEY;
     const user = await getVerifiedCustomer(req);
     await ensureLoyaltySchema(pool).catch(() => {});
+    await ensureCouponsSchema(pool).catch(() => {});
     await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_news(id TEXT PRIMARY KEY,title TEXT NOT NULL,content TEXT NOT NULL,image TEXT NOT NULL DEFAULT '',published BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`).catch(() => {});
-    const [catalogueResult, settingsResult, ownOrdersResult, newsResult, walletResult] = await Promise.all([
+    const [catalogueResult, settingsResult, ownOrdersResult, newsResult, walletResult, couponResult, challengeResult] = await Promise.all([
       pool.query("SELECT id,name,category,price,description,stock,sizes,tag FROM public.ebnimaam_products WHERE is_active=TRUE AND stock>0 ORDER BY updated_at DESC LIMIT 80").catch(() => ({ rows: [] as any[] })),
       pool.query("SELECT settings FROM public.ebnimaam_store_settings WHERE id=1").catch(() => ({ rows: [] as any[] })),
       user ? pool.query("SELECT reference,status,fulfilment_status,COALESCE(order_total_kobo,amount_kobo) AS order_total_kobo,created_at FROM public.ebnimaam_orders WHERE auth_user_id=$1 ORDER BY created_at DESC LIMIT 8",[user.id]).catch(() => ({ rows: [] as any[] })) : Promise.resolve({ rows: [] as any[] }),
       pool.query("SELECT title,content,created_at FROM public.ebnimaam_news WHERE published=TRUE ORDER BY created_at DESC LIMIT 8").catch(() => ({ rows: [] as any[] })),
       user ? walletAvailable(pool,user.id).catch(() => null) : Promise.resolve(null),
+      pool.query(
+        `SELECT code,discount_type,value,min_spend_kobo,valid_until
+         FROM public.ebnimaam_coupons
+         WHERE active=TRUE AND (valid_until IS NULL OR valid_until>NOW())
+           AND (max_redemptions IS NULL OR redeemed_count<max_redemptions)
+         ORDER BY created_at DESC LIMIT 20`
+      ).catch(() => ({ rows: [] as any[] })),
+      pool.query(
+        `SELECT title,description,duration_days,reward_kobo,max_team_size,milestones
+         FROM public.ebnimaam_challenges WHERE active=TRUE ORDER BY created_at DESC LIMIT 12`
+      ).catch(() => ({ rows: [] as any[] })),
     ]);
     const storeSettings = settingsResult.rows[0]?.settings || {};
     const catalogueContext = (catalogueResult.rows || []).map((p:any) => ({
@@ -84,13 +97,15 @@ export async function POST(req: Request) {
       totalNaira:Number(o.order_total_kobo)/100,createdAt:o.created_at,
     }));
     const newsContext=(newsResult.rows||[]).map((item:any)=>({title:String(item.title),content:String(item.content||'').slice(0,800),createdAt:item.created_at}));
+    const couponsContext=(couponResult.rows||[]).map((item:any)=>({code:String(item.code),discountType:String(item.discount_type),value:Number(item.value),minimumSpendNaira:Number(item.min_spend_kobo||0)/100,validUntil:item.valid_until}));
+    const challengesContext=(challengeResult.rows||[]).map((item:any)=>({title:String(item.title),description:String(item.description||'').slice(0,700),durationDays:Number(item.duration_days),rewardNaira:Number(item.reward_kobo)/100,maxTeamSize:Number(item.max_team_size),milestones:Array.isArray(item.milestones)?item.milestones:[]}));
     const liveContext = [
       'LIVE EBNIMAAM WEBSITE CONTEXT (use only these facts; if missing say you cannot verify):',
       JSON.stringify({storeName:'Ebnimaam',country:'Nigeria',pickupAddress:storeSettings.pickupAddress||'Terminus Main Market, near the bus stop',
         pickupHours:storeSettings.pickupHours||'',supportEmail:storeSettings.supportEmail||'ebnimaam.com@gmail.com',
         supportPhone:storeSettings.supportPhone||'08145672755',deliveryFeesByState:storeSettings.deliveryFeesByState||{},
         deliveryRules:storeSettings.deliveryRules||'',returnsPolicy:storeSettings.returnsPolicy||'',shippingPolicy:storeSettings.shippingPolicy||'',
-        terms:storeSettings.terms||'',promotions:storeSettings.promotions||[],products:catalogueContext,news:newsContext,
+        terms:storeSettings.terms||'',promotions:storeSettings.promotions||[],availableCoupons:couponsContext,activeTeamChallenges:challengesContext,products:catalogueContext,news:newsContext,
         publishedReturnsPolicySummary:'The published policy explains Nigerian consumer rights, assessment of returns in a reasonable time, remedies for faulty, damaged, incomplete or incorrect goods, and manual refund processing. It does not set an arbitrary seven-day deadline that removes statutory rights.',
         publishedPrivacySummary:'The published Privacy Policy explains data use, rights requests, account information, safeguards and contact details. Do not make up retention periods or data-sharing practices.',
         publishedTermsSummary:'The published Terms cover Nigeria-only orders, Paystack, delivery fees shown at checkout, fulfilment, account requirements, customer conduct and contact information.',

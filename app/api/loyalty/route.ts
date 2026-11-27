@@ -158,10 +158,8 @@ export async function POST(req: Request) {
       try{
         await client.query('BEGIN');
         await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[user.id]);
-        const balance=await walletBalance(client,user.id);
-        const reserved=await client.query("SELECT COALESCE(SUM(amount_kobo),0)::bigint AS amount FROM public.ebnimaam_wallet_withdrawals WHERE user_id=$1 AND status='pending'",[user.id]);
-        const available=balance-Number(reserved.rows[0]?.amount||0);
-        if(amountKobo>available) throw new Error('The requested amount is higher than your available Ebnimaam balance.');
+        const available=await walletAvailable(client,user.id);
+        if(amountKobo>available) throw new Error('The requested amount is higher than your available Ebnimaam balance after checkout and refund reservations.');
         await client.query(
           `INSERT INTO public.ebnimaam_wallet_withdrawals(user_id,amount_kobo,bank_details)
            VALUES($1,$2,$3::jsonb)`,
