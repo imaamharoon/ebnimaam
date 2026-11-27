@@ -165,8 +165,7 @@ export async function POST(req: Request) {
     await ensureLoyaltySchema(pool);
     await ensureCouponsSchema(pool);
     await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS order_total_kobo BIGINT');
-    await pool.query('UPDATE public.ebnimaam_orders SET order_total_kobo=amount_kobo WHERE order_total_kobo IS NULL');
-
+  
     let discountKobo = 0;
     let walletCreditKobo = 0;
     let amountDueKobo = 0;

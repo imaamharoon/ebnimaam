@@ -151,7 +151,7 @@ export async function POST(req: Request) {
       const amountKobo=Number(body.amountKobo);
       const bankName=String(body.bankName||'').trim().slice(0,80);
       const accountName=String(body.accountName||'').trim().slice(0,100);
-      const accountNumber=String(body.accountNumber||'').replace(/\D/g,'').slice(0,10);
+      const accountNumber=String(body.accountNumber||'').replace(/\D/g,'');
       if(!Number.isSafeInteger(amountKobo)||amountKobo<100||amountKobo>100_000_000||!bankName||!accountName||accountNumber.length!==10)
         return NextResponse.json({error:'Enter a valid refund amount and complete Nigerian bank account details.'},{status:400});
       const client=await pool.connect();

@@ -40,8 +40,7 @@ export async function GET(req: Request) {
   try {
     await ensureOrderEmailEventsTable();
     await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS order_total_kobo BIGINT');
-    await pool.query('UPDATE public.ebnimaam_orders SET order_total_kobo=amount_kobo WHERE order_total_kobo IS NULL');
-    const [result, customerResult, activity] = await Promise.all([
+      const [result, customerResult, activity] = await Promise.all([
       pool.query(
         `SELECT o.reference,o.auth_user_id,o.customer_email,o.customer_name,o.customer_phone,o.address,
                 COALESCE(o.order_total_kobo,o.amount_kobo) AS amount_kobo,o.amount_kobo AS paystack_amount_kobo,o.currency,o.status,o.fulfilment_status,o.items,o.created_at,o.paid_at,

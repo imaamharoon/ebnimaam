@@ -137,7 +137,6 @@ export async function ensureLoyaltySchema(pool: Pool | PoolClient) {
   )`);
   await pool.query('CREATE INDEX IF NOT EXISTS ebnimaam_challenge_members_user_idx ON public.ebnimaam_challenge_members(user_id)');
   await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS order_total_kobo BIGINT');
-  await pool.query('UPDATE public.ebnimaam_orders SET order_total_kobo=amount_kobo WHERE order_total_kobo IS NULL');
   await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_challenge_submissions(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     team_id UUID NOT NULL REFERENCES public.ebnimaam_challenge_teams(id) ON DELETE CASCADE,
