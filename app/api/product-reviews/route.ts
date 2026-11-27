@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { checkRateLimit } from '../../../lib/rate-limit';
+import { isCurrentCustomerSession } from '../../../lib/customer-sessions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,7 @@ async function customer(req: Request) {
   const data = await response.json().catch(() => ({}));
   const user = data?.user;
   if (!user?.id || !user?.email || user.emailVerified !== true) return null;
+  if (!(await isCurrentCustomerSession(req, String(user.id)))) return null;
   return user as { id: string; email: string; name?: string; emailVerified?: boolean };
 }
 async function init() {
