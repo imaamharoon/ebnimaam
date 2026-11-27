@@ -145,11 +145,11 @@ export async function POST(req: Request) {
     const storeSettings = settingsResult.rows[0]?.settings || {};
     const configuredFees = storeSettings.deliveryFeesByState || {};
     const pickupAddress = String(storeSettings.pickupAddress || '').trim();
-    if (fulfilmentMethod === 'pickup' && !pickupAddress) {
+    if (fulfilmentMethod === 'pickup' && (storeSettings.pickupAddressConfirmed !== true || !pickupAddress)) {
       return NextResponse.json({ error: 'Self-pickup is not available yet. Please contact Ebnimaam or choose home delivery.' }, { status: 409 });
     }
     const configuredDeliveryFee = configuredFees[state] ?? configuredFees.default;
-    if (fulfilmentMethod === 'delivery' && (configuredDeliveryFee === undefined || configuredDeliveryFee === null || configuredDeliveryFee === '')) {
+    if (fulfilmentMethod === 'delivery' && (storeSettings.deliveryFeesConfirmed !== true || configuredDeliveryFee === undefined || configuredDeliveryFee === null || configuredDeliveryFee === '')) {
       return NextResponse.json({ error: 'Delivery to this state is not configured yet. Please contact Ebnimaam before placing your order.' }, { status: 409 });
     }
     const deliveryFee = fulfilmentMethod === 'pickup' ? 0 : Number(configuredDeliveryFee);
