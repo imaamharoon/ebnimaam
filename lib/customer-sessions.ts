@@ -88,7 +88,10 @@ export async function activateCustomerSession(response: NextResponse, req: Reque
   if (!/^[A-Za-z0-9_-]{32,100}$/.test(deviceId)) deviceId = randomBytes(32).toString('base64url');
   const label = deviceLabel(req);
   const deviceHash = digest(deviceId);
-  const knownDevice = await pool.query('SELECT 1 FROM public.ebnimaam_customer_known_devices WHERE user_id=$1 AND device_hash=$2', [user.id, deviceHash]);
+  const [knownDevice, anyKnownDevice] = await Promise.all([
+    pool.query('SELECT 1 FROM public.ebnimaam_customer_known_devices WHERE user_id=$1 AND device_hash=$2', [user.id, deviceHash]),
+    pool.query('SELECT 1 FROM public.ebnimaam_customer_known_devices WHERE user_id=$1 LIMIT 1', [user.id]),
+  ]);
   const isNewDevice = !knownDevice.rowCount;
   await pool.query(
     `INSERT INTO public.ebnimaam_customer_known_devices(user_id,device_hash,device_label,first_seen_at,last_seen_at)
@@ -110,7 +113,7 @@ export async function activateCustomerSession(response: NextResponse, req: Reque
   if (isNewDevice) {
     const event = await pool.query(
       'INSERT INTO public.ebnimaam_customer_security_events(user_id,email,event_type,device_label,notification_status) VALUES($1,$2,$3,$4,$5) RETURNING id',
-      [user.id, user.email, knownDevice.rowCount ? 'new_device' : 'first_sign_in', label, 'pending'],
+      [user.id, user.email, anyKnownDevice.rowCount ? 'new_device' : 'first_sign_in', label, 'pending'],
     );
     const status = await sendNewDeviceEmail(user.email, label);
     await pool.query('UPDATE public.ebnimaam_customer_security_events SET notification_status=$2 WHERE id=$1', [event.rows[0].id, status]);
