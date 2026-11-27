@@ -70,7 +70,6 @@ export async function POST(req: Request) {
     await ensureLoyaltyTables();
     await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS paystack_amount_kobo BIGINT');
     await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS wallet_amount_kobo BIGINT NOT NULL DEFAULT 0');
-    await pool.query('UPDATE public.ebnimaam_orders SET paystack_amount_kobo=amount_kobo WHERE paystack_amount_kobo IS NULL');
 
     const customerNameInput = String(body?.customer?.name || '').trim().slice(0, 120);
     const customerPhone = String(body?.customer?.phone || '').trim().slice(0, 40);
