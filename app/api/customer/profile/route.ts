@@ -27,8 +27,7 @@ export async function GET(req: Request) {
     const result = await pool.query('SELECT full_name,phone,addresses,preferences,updated_at FROM public.ebnimaam_customer_profiles WHERE user_id=$1', [user.id]);
     const profile = result.rows[0] || { full_name: user.name || '', phone: '', addresses: [], preferences: {} };
     await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS order_total_kobo BIGINT');
-    await pool.query('UPDATE public.ebnimaam_orders SET order_total_kobo=amount_kobo WHERE order_total_kobo IS NULL');
-    const orders = await pool.query(
+const orders = await pool.query(
       `SELECT o.reference,COALESCE(o.order_total_kobo,o.amount_kobo) AS amount_kobo,o.amount_kobo AS paystack_amount_kobo,o.currency,o.status,o.fulfilment_status,o.items,o.created_at,o.paid_at,
               COALESCE((SELECT json_agg(json_build_object('status',h.status,'note',h.note,'created_at',h.created_at) ORDER BY h.created_at ASC)
                 FROM public.ebnimaam_order_status_history h WHERE h.reference=o.reference),'[]'::json) AS history
