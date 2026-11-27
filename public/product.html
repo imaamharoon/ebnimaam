@@ -394,8 +394,17 @@
       const fitLabel={true_to_size:"True to size",runs_small:"Runs small",runs_large:"Runs large"};
       $("reviewList").innerHTML=reviews.map(review=>{
         const image=review.photo_url?'<img loading="lazy" src="'+escapeHtml(review.photo_url)+'" alt="Customer photo">':"";
-        return '<article class="review-card">'+image+'<div class="rating-stars">'+"★".repeat(Number(review.rating))+"☆".repeat(5-Number(review.rating))+'</div><strong>'+escapeHtml(review.customer_name||"Verified buyer")+'</strong><p>'+escapeHtml(fitLabel[review.fit_feedback]||"Fit feedback")+'</p><p>'+escapeHtml(review.comment||"")+'</p></article>';
+        return '<article class="review-card">'+image+'<div class="rating-stars">'+"★".repeat(Number(review.rating))+"☆".repeat(5-Number(review.rating))+'</div><strong>'+escapeHtml(review.customer_name||"Verified buyer")+'</strong><p>'+escapeHtml(fitLabel[review.fit_feedback]||"Fit feedback")+'</p><p>'+escapeHtml(review.comment||"")+'</p><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select data-review-report-reason="'+escapeHtml(review.id)+'" aria-label="Reason for reporting this review" style="max-width:190px;padding:8px"><option value="spam">Spam</option><option value="abuse">Abusive content</option><option value="false_information">False information</option><option value="privacy">Privacy concern</option><option value="other">Other concern</option></select><button type="button" class="btn btn-secondary" data-report-review="'+escapeHtml(review.id)+'" style="width:auto;padding:8px 12px">Report review</button></div></article>';
       }).join("");
+      $("reviewList").querySelectorAll("[data-report-review]").forEach(button=>button.addEventListener("click",async()=>{
+        const reviewId=button.dataset.reportReview,reason=$("[data-review-report-reason='"+reviewId+"']")?.value||"other";
+        const original=button.textContent;button.disabled=true;button.textContent="Sending…";
+        try{
+          const response=await fetch("/api/product-reviews/report",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({reviewId,reason})});
+          const data=await response.json();if(!response.ok)throw new Error(data.error||"This review could not be reported.");
+          button.textContent="Reported";button.disabled=true;
+        }catch(error){button.disabled=false;button.textContent=original;window.alert(error?.message||"This review could not be reported.")}
+      }));
     }catch{$("reviewList").innerHTML='<p class="review-muted">Reviews are temporarily unavailable.</p>'}
   }
   async function loadRecommendations(){
