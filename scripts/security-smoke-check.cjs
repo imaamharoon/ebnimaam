@@ -99,6 +99,12 @@ assert.ok(reviewRoute.includes('isCurrentCustomerSession'));
 assert.ok(storefront.includes('window.trackOrder'));
 assert.ok(storefront.includes('whatsappChannel'));
 assert.ok(account.includes('continueAfterAccountAuth'));
+assert.ok(account.includes('data-reorder-index'));
+assert.ok(account.includes("String(order.status||'').toLowerCase()!=='paid'"));
+assert.ok(account.includes("fetch('/api/customer/cart'"));
+assert.ok(account.includes('savedData.userId'));
+assert.ok(account.includes("type:'ebnimaam-account-reorder'"));
+assert.ok(storefront.includes("type==='ebnimaam-account-reorder'"));
 
 new vm.Script(serviceWorker, { filename: 'public/service-worker.js' });
 process.stdout.write('Security headers, browser script syntax, account-bound order access, single-device sessions, offline-cache boundaries, delivery pricing, and shop comparison smoke checks passed.\\n');
