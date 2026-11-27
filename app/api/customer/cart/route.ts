@@ -66,14 +66,14 @@ async function validateAgainstCurrentStock(items: ReturnType<typeof normalizeIte
   for (const row of result.rows) products.set(String(row.id), row);
   if (products.size !== ids.length) throw new Error('A saved product is no longer available. Refresh your bag and try again.');
 
-  for (const [id, quantity] of totalsByProduct) {
+  for (const [id, quantity] of Array.from(totalsByProduct.entries())) {
     const product = products.get(id);
     const stock = Number(product?.stock);
     if (product?.is_active === false || !Number.isSafeInteger(stock) || stock < quantity) {
       throw new Error('A saved product no longer has enough available stock. Refresh your bag before checkout.');
     }
   }
-  for (const [key, quantity] of totalsBySize) {
+  for (const [key, quantity] of Array.from(totalsBySize.entries())) {
     const [id, size] = JSON.parse(key) as [string, string];
     let sizes = products.get(id)?.size_stock;
     if (typeof sizes === 'string') {
