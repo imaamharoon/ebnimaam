@@ -32,6 +32,16 @@ async function init() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(product_id,user_id)
   )`);
+  await pool.query("ALTER TABLE public.ebnimaam_product_reviews ADD COLUMN IF NOT EXISTS moderation_status TEXT NOT NULL DEFAULT 'published'");
+  await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_product_review_reports(
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    review_id UUID NOT NULL REFERENCES public.ebnimaam_product_reviews(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','reviewed','dismissed')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(review_id,user_id)
+  )`);
 }
 export async function GET(req: Request) {
   try {
@@ -39,8 +49,8 @@ export async function GET(req: Request) {
     const productId = String(new URL(req.url).searchParams.get('productId') || '').trim().slice(0, 120);
     if (!productId) return NextResponse.json({ error: 'Product ID is required.' }, { status: 400 });
     const [reviews, summary] = await Promise.all([
-      pool.query("SELECT id,split_part(customer_name,' ',1) AS customer_name,rating,fit_feedback,comment,photo_url,created_at FROM public.ebnimaam_product_reviews WHERE product_id=$1 ORDER BY created_at DESC LIMIT 100", [productId]),
-      pool.query('SELECT COUNT(*)::int AS count,COALESCE(AVG(rating),0)::numeric(3,1) AS average FROM public.ebnimaam_product_reviews WHERE product_id=$1', [productId]),
+      pool.query("SELECT id,split_part(customer_name,' ',1) AS customer_name,rating,fit_feedback,comment,photo_url,created_at FROM public.ebnimaam_product_reviews WHERE product_id=$1 AND moderation_status='published' ORDER BY created_at DESC LIMIT 100", [productId]),
+      pool.query('SELECT COUNT(*)::int AS count,COALESCE(AVG(rating),0)::numeric(3,1) AS average FROM public.ebnimaam_product_reviews WHERE product_id=$1 AND moderation_status='published', [productId]),
     ]);
     return NextResponse.json({ reviews: reviews.rows, summary: summary.rows[0] || { count: 0, average: 0 } }, { headers: { 'cache-control': 'no-store' } });
   } catch {
@@ -85,7 +95,7 @@ export async function POST(req: Request) {
       `INSERT INTO public.ebnimaam_product_reviews(product_id,user_id,customer_name,rating,fit_feedback,comment,photo_url)
        VALUES($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT(product_id,user_id) DO UPDATE SET customer_name=EXCLUDED.customer_name,rating=EXCLUDED.rating,
-       fit_feedback=EXCLUDED.fit_feedback,comment=EXCLUDED.comment,photo_url=EXCLUDED.photo_url,created_at=NOW()`,
+       fit_feedback=EXCLUDED.fit_feedback,comment=EXCLUDED.comment,photo_url=EXCLUDED.photo_url,moderation_status='published',created_at=NOW()`,
       [productId, user.id, customerName, rating, fit, comment, photo || null],
     );
     return NextResponse.json({ ok: true });
