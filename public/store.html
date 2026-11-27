@@ -205,17 +205,19 @@ async function updateCheckoutSummary(){
  updateFulfilmentMethodUi();
  const pickup=method==='pickup'&&!!String(checkoutStoreSettings.pickupAddress||'').trim();
  const fees=checkoutStoreSettings.deliveryFeesByState||{};
- const fallback=state==='Plateau'?1500:['FCT - Abuja','Kano','Kaduna','Nasarawa','Bauchi'].includes(state)?3500:['Lagos','Ogun','Oyo','Rivers'].includes(state)?4500:5000;
- const fee=pickup?0:(state?Number(fees[state]??fees.default??fallback):null);
+ const configuredFee=state?(fees[state]??fees.default):null;
+ const numericFee=Number(configuredFee);
+ const feeIsConfigured=configuredFee!==undefined&&configuredFee!==null&&configuredFee!==''&&Number.isSafeInteger(numericFee)&&numericFee>=0&&numericFee<=50000;
+ const fee=pickup?0:(feeIsConfigured?numericFee:null);
  const total=fee===null?null:subtotal+fee;
  const useWallet=!!document.getElementById('useWalletCredit')?.checked;
  const walletCredit=total===null||!useWallet?0:Math.min(checkoutWalletAvailableKobo,Math.max(0,Math.round(total*100)-100));
  const due=total===null?null:Math.max(1,Math.round(total*100)-walletCredit);
  summary.innerHTML='<div class="totalrow"><span>'+cart.reduce((sum,item)=>sum+item.qty,0)+' item(s) · Subtotal</span><b>'+money(subtotal)+'</b></div>' +
- '<div class="totalrow"><span>'+(pickup?'Self-pickup':'Delivery fee')+'</span><b>'+(pickup?'FREE':fee===null?'Select a state':money(fee))+'</b></div>' +
+ '<div class="totalrow"><span>'+(pickup?'Self-pickup':'Delivery fee')+'</span><b>'+(pickup?'FREE':fee===null?(state?'Not configured':'Select a state'):money(fee))+'</b></div>' +
  '<div class="totalrow grand"><span>Estimated order total</span><b>'+(total===null?'—':money(total))+'</b></div>' +
  (useWallet&&walletCredit>0?'<div class="totalrow"><span>Ebnimaam balance applied</span><b>−'+money(walletCredit/100)+'</b></div><div class="totalrow grand"><span>Paystack amount due</span><b>'+money(due/100)+'</b></div>':'') +
- '<p class="form-note">'+(pickup?'No delivery fee will be charged for self-pickup. The collection address is shown above.':'Your delivery fee and final total are calculated again securely by Ebnimaam before payment.')+'</p>' +
+ '<p class="form-note">'+(pickup?'No delivery fee will be charged for self-pickup. The collection address is shown above.':fee===null?'A delivery fee has not been configured for this state. Checkout cannot continue until Ebnimaam sets the actual fee.':'Your delivery fee and final total are calculated again securely by Ebnimaam before payment.')+'</p>' +
  (document.getElementById('promoCode')?.value.trim()?'<p class="form-note">Coupon code will be checked by the server before payment is initialized.</p>':'');
 }
 document.getElementById('useWalletCredit')?.addEventListener('change',()=>void updateCheckoutSummary());
