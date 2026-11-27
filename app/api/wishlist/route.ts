@@ -24,7 +24,8 @@ export async function PUT(req:Request){
  try{
   await init();const body=await req.json();const input=Array.isArray(body.productIds)?body.productIds:[];
   if(input.length>200)return NextResponse.json({error:'You can save up to 200 products.'},{status:400});
-  const ids=[...new Set(input.map((value:any)=>String(value||'').trim()).filter((value:string)=>value.length>0&&value.length<=120))];
+  const normalizedIds=input.map((value:any)=>String(value||'').trim());
+  const ids=normalizedIds.filter((value:string,index:number,list:string[])=>value.length>0&&value.length<=120&&list.indexOf(value)===index);
   if(ids.length){
    const valid=await pool.query('SELECT id FROM public.ebnimaam_products WHERE id=ANY($1::text[])',[ids]);
    if(valid.rowCount!==ids.length)return NextResponse.json({error:'One or more saved products could not be found.'},{status:400});
