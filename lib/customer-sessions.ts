@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { Pool } from 'pg';
 import { NextResponse } from 'next/server';
+import nodemailer from 'nodemailer';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 3 });
 const SESSION_COOKIE = 'ebnimaam_customer_session';
@@ -61,21 +62,45 @@ async function ensureSessionTables() {
   )`);
 }
 async function sendNewDeviceEmail(email: string, label: string) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM;
-  if (!apiKey || !from) return 'not_configured';
+  const smtpUser = process.env.SMTP_USER || '';
+  const smtpPass = process.env.SMTP_PASS || '';
+  const from = process.env.EMAIL_FROM || smtpUser;
+  const apiKey = process.env.RESEND_API_KEY || '';
   const safeLabel = label.replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c] || c));
+  const subject = 'New sign-in to your Ebnimaam account';
+  const text = 'New sign-in detected. Your Ebnimaam account was signed in from a new device: ' + label + '. If this was not you, reset your password immediately and contact Ebnimaam support.';
+  const html = '<div style="font-family:Arial,sans-serif;line-height:1.6;color:#202a35"><h2 style="color:#102544">New sign-in detected</h2><p>Your Ebnimaam account was signed in from a new device:</p><p><strong>' + safeLabel + '</strong></p><p>If this was you, no action is needed. If you do not recognise this sign-in, reset your password immediately and contact Ebnimaam support.</p><p>Ebnimaam Security</p></div>';
   try {
+    if (smtpUser && smtpPass) {
+      const port = Number(process.env.SMTP_PORT || 465);
+      if (port !== 465 && port !== 587) throw new Error('SMTP_PORT must be 465 (SSL) or 587 (STARTTLS).');
+      const transport = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port,
+        secure: port === 465,
+        requireTLS: port === 587,
+        auth: { user: smtpUser, pass: smtpPass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
+        tls: { minVersion: 'TLSv1.2' },
+      });
+      let info: any;
+      try {
+        info = await transport.sendMail({ from, to: email, subject, html, text });
+      } finally {
+        transport.close();
+      }
+      const accepted = Array.isArray(info?.accepted) && info.accepted.some((entry: any) =>
+        String(typeof entry === 'string' ? entry : entry?.address || '').trim().toLowerCase() === email.toLowerCase()
+      );
+      return accepted && typeof info?.messageId === 'string' && info.messageId ? 'sent' : 'failed';
+    }
+    if (!apiKey || !from) return 'not_configured';
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + apiKey, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        from,
-        to: [email],
-        subject: 'New sign-in to your Ebnimaam account',
-        html: '<div style="font-family:Arial,sans-serif;line-height:1.6;color:#202a35"><h2 style="color:#102544">New sign-in detected</h2><p>Your Ebnimaam account was signed in from a new device:</p><p><strong>' + safeLabel + '</strong></p><p>If this was you, no action is needed. If you do not recognise this sign-in, reset your password immediately and contact Ebnimaam support.</p><p>Ebnimaam Security</p></div>',
-        text: 'New sign-in detected. Your Ebnimaam account was signed in from a new device: ' + label + '. If this was not you, reset your password immediately and contact Ebnimaam support.',
-      }),
+      body: JSON.stringify({ from, to: [email], subject, html, text }),
       cache: 'no-store',
       signal: AbortSignal.timeout(8000),
     });
