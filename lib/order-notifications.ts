@@ -15,7 +15,7 @@ export function isOrderEmailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM && process.env.AUTH_SECRET);
 }
 export async function ensureOrderEmailEventsTable(): Promise<void> {
-  await pool.query('CREATE TABLE IF NOT EXISTS public.ebnimaam_order_email_events (event_key TEXT PRIMARY KEY, reference TEXT NOT NULL, status_key TEXT NOT NULL, recipient TEXT NOT NULL, delivery_status TEXT NOT NULL DEFAULT ''pending'', provider_message_id TEXT, last_error TEXT, attempt_count INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), sent_at TIMESTAMPTZ)');
+  await pool.query("CREATE TABLE IF NOT EXISTS public.ebnimaam_order_email_events (event_key TEXT PRIMARY KEY, reference TEXT NOT NULL, status_key TEXT NOT NULL, recipient TEXT NOT NULL, delivery_status TEXT NOT NULL DEFAULT 'pending', provider_message_id TEXT, last_error TEXT, attempt_count INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), sent_at TIMESTAMPTZ)");
   await pool.query('CREATE INDEX IF NOT EXISTS ebnimaam_order_email_events_reference_idx ON public.ebnimaam_order_email_events(reference, created_at DESC)');
 }
 export function createOrderTrackingToken(reference: string): string {
@@ -66,7 +66,7 @@ export async function sendOrderStatusEmail(reference: string, statusInput: strin
   const recipient = String(order.customer_email || '').trim().toLowerCase();
   const eventKey = reference + ':' + status + (force ? ':manual:' + Date.now() : '');
   const claim = await pool.query(
-    'INSERT INTO public.ebnimaam_order_email_events(event_key,reference,status_key,recipient,delivery_status,attempt_count) VALUES($1,$2,$3,$4,''sending'',1) ON CONFLICT(event_key) DO UPDATE SET delivery_status=''sending'',last_error=NULL,attempt_count=public.ebnimaam_order_email_events.attempt_count+1,updated_at=NOW() WHERE public.ebnimaam_order_email_events.delivery_status IN (''failed'',''not_configured'') OR (public.ebnimaam_order_email_events.delivery_status=''sending'' AND public.ebnimaam_order_email_events.updated_at < NOW()-INTERVAL ''5 minutes'') RETURNING event_key',
+    "INSERT INTO public.ebnimaam_order_email_events(event_key,reference,status_key,recipient,delivery_status,attempt_count) VALUES($1,$2,$3,$4,'sending',1) ON CONFLICT(event_key) DO UPDATE SET delivery_status='sending',last_error=NULL,attempt_count=public.ebnimaam_order_email_events.attempt_count+1,updated_at=NOW() WHERE public.ebnimaam_order_email_events.delivery_status IN ('failed','not_configured') OR (public.ebnimaam_order_email_events.delivery_status='sending' AND public.ebnimaam_order_email_events.updated_at < NOW()-INTERVAL '5 minutes') RETURNING event_key",
     [eventKey, reference, status, recipient || 'unknown']
   );
   if (!claim.rowCount) return { deliveryStatus:'already_sent' };
@@ -85,7 +85,7 @@ export async function sendOrderStatusEmail(reference: string, statusInput: strin
     trackingUrl = new URL('/track?token=' + encodeURIComponent(createOrderTrackingToken(reference)), origin).toString();
   } catch {
     const reason = 'Secure tracking token could not be created.';
-    await pool.query('UPDATE public.ebnimaam_order_email_events SET delivery_status=''not_configured'',last_error=$1,updated_at=NOW() WHERE event_key=$2',[reason,eventKey]);
+    await pool.query("UPDATE public.ebnimaam_order_email_events SET delivery_status='not_configured',last_error=$1,updated_at=NOW() WHERE event_key=$2",[reason,eventKey]);
     return { deliveryStatus:'not_configured',reason };
   }
   const items = Array.isArray(order.items) ? order.items : (()=>{try{return JSON.parse(String(order.items||'[]'));}catch{return [];}})();
@@ -104,10 +104,10 @@ export async function sendOrderStatusEmail(reference: string, statusInput: strin
     const payload = await response.json().catch(()=>({}));
     if (!response.ok || !payload?.id) {
       const reason = String(payload?.message||payload?.error||'Email provider could not accept the message.').slice(0,400);
-      await pool.query('UPDATE public.ebnimaam_order_email_events SET delivery_status=''failed'',last_error=$1,updated_at=NOW() WHERE event_key=$2',[reason,eventKey]);
+      await pool.query("UPDATE public.ebnimaam_order_email_events SET delivery_status='failed',last_error=$1,updated_at=NOW() WHERE event_key=$2",[reason,eventKey]);
       return {deliveryStatus:'failed',reason};
     }
-    await pool.query('UPDATE public.ebnimaam_order_email_events SET delivery_status=''sent'',provider_message_id=$1,last_error=NULL,sent_at=NOW(),updated_at=NOW() WHERE event_key=$2',[String(payload.id).slice(0,160),eventKey]);
+    await pool.query("UPDATE public.ebnimaam_order_email_events SET delivery_status='sent',provider_message_id=$1,last_error=NULL,sent_at=NOW(),updated_at=NOW() WHERE event_key=$2",[String(payload.id).slice(0,160),eventKey]);
     return {deliveryStatus:'sent'};
   } catch (error:any) {
     const reason = String(error?.message||'Email delivery failed.').slice(0,400);
