@@ -2,7 +2,7 @@ name: Preview build validation
 
 on:
   push:
-    branches: [fix/paystack-size-stock-guards-20261127, security-experience-upgrade-20261127]
+    branches: [fix/paystack-size-stock-guards-20261127, security-experience-upgrade-20261127, release/loyalty-wallet-ai-20261128]
   pull_request:
     branches: [main]
   workflow_dispatch:
