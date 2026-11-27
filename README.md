@@ -100,7 +100,7 @@ Keep API keys and secrets out of GitHub, source code, browser code and chat. Do 
 
 Customer registration OTP, email verification and password-reset messages are sent by Neon Managed Auth, not by the order-notification API. Configure Neon Auth's custom SMTP settings separately with Resend's SMTP endpoint: host `smtp.resend.com`, port `465` (SSL) or `587` (STARTTLS), username `resend`, and the Resend API key as the password. Use a sender address verified in Resend. Test signup OTP, resend-code and password-reset flows separately; do not change the existing signup/session code as part of mail-provider setup.
 
-New-device security alerts must also be explicitly wired to the Resend API before claiming they are active; the current authentication proxy's successful-login path only establishes the customer session and does not itself send a new-device alert.
+The customer authentication proxy calls `activateCustomerSession()` after verified sign-in and email verification. That records first sign-ins/new devices and sends a Resend security alert when `RESEND_API_KEY` and `EMAIL_FROM` are configured; the security-event table records provider acceptance, not inbox delivery.
 
 The internal tracking page shows database status history and checks for updates every 30 seconds while the private link is open. Customers can also use the existing order-reference plus checkout-email lookup as a fallback. It is not a courier GPS feed. For map-based live location, a delivery partner API or rider location integration is required; a secure courier tracking URL can be saved per order in Admin.
 
