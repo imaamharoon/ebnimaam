@@ -1,11 +1,37 @@
 import { createHash, createHmac } from 'crypto';
 import { Pool } from 'pg';
+
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
+
+let rateLimitSchemaReady: Promise<void> | null = null;
+
+async function ensureRateLimitTable() {
+  if (!rateLimitSchemaReady) {
+    rateLimitSchemaReady = pool.query(`
+      CREATE TABLE IF NOT EXISTS public.ebnimaam_rate_limits (
+        rate_key TEXT PRIMARY KEY,
+        hits INTEGER NOT NULL DEFAULT 0,
+        window_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `).then(async () => {
+      await pool.query(
+        'CREATE INDEX IF NOT EXISTS ebnimaam_rate_limits_updated_at_idx ON public.ebnimaam_rate_limits(updated_at)',
+      );
+    }).then(() => undefined).catch((error) => {
+      rateLimitSchemaReady = null;
+      throw error;
+    });
+  }
+
+  await rateLimitSchemaReady;
+}
 export async function checkRateLimit(req: Request, scope: string, limit: number, windowSeconds: number) {
   if (!process.env.DATABASE_URL) throw new Error('Rate-limit database is not configured.');
   const ip = (req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown').trim().slice(0, 120) || 'unknown';
   const secret = process.env.AUTH_SECRET || process.env.BETTER_AUTH_SECRET || process.env.NEON_AUTH_SECRET;
   if (!secret) throw new Error('Rate-limit signing secret is not configured.');
+  await ensureRateLimitTable();
   const rateKey = createHmac('sha256', secret).update(scope + ':' + ip).digest('hex');
   const result = await pool.query(
     `INSERT INTO public.ebnimaam_rate_limits(rate_key,hits,window_started_at,updated_at)
@@ -26,8 +52,10 @@ export async function checkRateLimit(req: Request, scope: string, limit: number,
 /** Atomically consume a signed signup challenge nonce so it cannot be replayed. */
 export async function consumeOneTimeChallenge(nonce: string) {
   if (!/^[a-f0-9]{32}$/i.test(nonce)) return false;
+  if (!process.env.DATABASE_URL) throw new Error('Rate-limit database is not configured.');
   const secret = process.env.AUTH_SECRET || process.env.BETTER_AUTH_SECRET || process.env.NEON_AUTH_SECRET;
   if (!secret) throw new Error('Signup challenge signing secret is not configured.');
+  await ensureRateLimitTable();
   const digest = createHash('sha256').update(secret + ':signup-challenge-once:' + nonce).digest('hex');
   const rateKey = 'signup-once:' + digest;
   const result = await pool.query(
