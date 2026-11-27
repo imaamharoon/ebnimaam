@@ -86,13 +86,14 @@ The owner manages order progress in Admin → Orders:
 
 Customer order emails are sent for initial pending status, successful payment/processing, payment failure, picked items, dispatch, delivery, ready for pickup, collection and cancellation. A private HMAC-signed tracking link is included in each email; it expires after 90 days. Notification events are logged and de-duplicated so repeated admin saves do not repeatedly email customers. Admin can inspect notification delivery history and retry the current status notification.
 
-### Transactional email provider
+### Transactional email provider (free option)
 
-Transactional order email uses the Resend HTTP API. Configure both values in the existing Vercel project as encrypted/sensitive environment variables for Production and Preview:
-- RESEND_API_KEY — the API key from the Ebnimaam Resend account.
-- EMAIL_FROM — a sender address on a domain verified in Resend (for example, a store-owned orders address).
+Order-notification email supports Brevo's free transactional API and Resend. Brevo is preferred when `BREVO_API_KEY` is present; Resend remains the fallback. Brevo advertises up to 300 emails/day on its free plan, but account and sender verification are required. Configure in Vercel:
+- `BREVO_API_KEY` — Brevo API key (recommended free tier).
+- `EMAIL_FROM` — sender identity approved/verified by Brevo (format: `Ebnimaam <sender@example.com>`).
+- `AUTH_SECRET` — required for signed tracking links.
 
-Keep AUTH_SECRET configured; it signs private tracking links. Do not put these secrets in GitHub, source code, browser code or chat. Email delivery remains marked not_configured until both provider variables and the tracking signing secret are present. Verify the sender domain and send a controlled test to the store owner's inbox before enabling customer notification in production. The existing account verification/OTP email configuration is separate from these transactional order messages.
+If Brevo is not configured, `RESEND_API_KEY` is used as a fallback. These variables must be configured in Vercel; do not put secrets in GitHub, source code, browser code or chat. Email events remain not_configured until the provider, sender and tracking secret are available. Verify sender identity and test a message to the owner's inbox before relying on customer notifications. Account verification/OTP email is separate and still depends on the Neon Auth SMTP setup.
 
 The internal tracking page shows database status history and checks for updates every 30 seconds while the private link is open. Customers can also use the existing order-reference plus checkout-email lookup as a fallback. It is not a courier GPS feed. For map-based live location, a delivery partner API or rider location integration is required; a secure courier tracking URL can be saved per order in Admin.
 
