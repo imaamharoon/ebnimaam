@@ -91,6 +91,8 @@ export async function POST(req: Request) {
         if (prior.rowCount) { await client.query('ROLLBACK'); return fail('You are already on a team for this challenge.'); }
         const found = await client.query('SELECT id FROM public.ebnimaam_challenge_teams WHERE invite_code=$1 AND challenge_slug=$2 FOR UPDATE', [inviteCode, challengeDefinition.slug]);
         if (!found.rowCount) { await client.query('ROLLBACK'); return fail('That team invitation code was not found.', 404); }
+        const started = await client.query('SELECT 1 FROM public.ebnimaam_challenge_submissions WHERE team_id=$1 LIMIT 1', [found.rows[0].id]);
+        if (started.rowCount) { await client.query('ROLLBACK'); return fail('This team has already started its challenge and is no longer accepting members.'); }
         const count = await client.query('SELECT COUNT(*)::int AS n FROM public.ebnimaam_challenge_members WHERE team_id=$1', [found.rows[0].id]);
         if (Number(count.rows[0].n) >= challengeDefinition.maxTeamSize) { await client.query('ROLLBACK'); return fail('This team is already full.'); }
         await client.query('INSERT INTO public.ebnimaam_challenge_members(team_id,challenge_slug,user_id) VALUES($1,$2,$3)', [found.rows[0].id, challengeDefinition.slug, user.id]);
