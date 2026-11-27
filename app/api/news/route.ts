@@ -31,7 +31,10 @@ export async function POST(req: Request) {
     const image = String(body.image || '').trim();
     if (!title || !content) return NextResponse.json({ error: 'Headline and content are required.' }, { status: 400 });
     if (image && !image.startsWith('https://') && !image.startsWith('data:image/')) return NextResponse.json({ error: 'News image must be HTTPS or an uploaded image.' }, { status: 400 });
-    if (image.length > 5_000_000) return NextResponse.json({ error: 'Image is too large.' }, { status: 400 });
+    if (image.length > 3_500_000) return NextResponse.json({ error: 'News photo is too large after upload. Choose another photo.' }, { status: 400 });
+    if (image.startsWith('data:image/') && !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) {
+      return NextResponse.json({ error: 'Upload a valid JPG, PNG or WebP photo.' }, { status: 400 });
+    }
     const id = String(body.id || 'news-' + crypto.randomUUID());
     const published = body.published !== false;
     await pool.query(

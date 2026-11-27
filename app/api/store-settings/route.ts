@@ -36,7 +36,7 @@ function normalizeSocialLinks(input: unknown) {
 }
 const defaultSettings = {
   storeName:'ebnimaam',country:'Nigeria',deliveryCountries:['Nigeria'],deliveryFeesByState:defaultFees,
-  pickupAddress:'',pickupHours:'',holidayExceptions:'',deliveryRules:'',
+  pickupAddress:'Terminus Main Market, near the bus stop',pickupHours:'',holidayExceptions:'',deliveryRules:'',
   supportEmail:'ebnimaam.com@gmail.com',supportPhone:'08145672755',socialLinks:{},
   returnsPolicy:'',privacyPolicy:'',terms:'',shippingPolicy:'',promotions:[],
 };
@@ -50,6 +50,7 @@ export async function GET(req: Request) {
     const result = await pool.query('SELECT settings,updated_at FROM public.ebnimaam_store_settings WHERE id=1');
     const settings = { ...defaultSettings, ...(result.rows[0]?.settings || {}) };
     if (!String(settings.supportEmail || '').trim()) settings.supportEmail = defaultSettings.supportEmail;
+    if (!String(settings.pickupAddress || '').trim()) settings.pickupAddress = defaultSettings.pickupAddress;
     if (!String(settings.supportPhone || '').trim()) settings.supportPhone = defaultSettings.supportPhone;
     if (!settings.deliveryFeesByState || typeof settings.deliveryFeesByState !== 'object') settings.deliveryFeesByState = defaultFees;
     else settings.deliveryFeesByState = { ...defaultFees, ...settings.deliveryFeesByState };
@@ -81,6 +82,8 @@ export async function PUT(req: Request) {
     const allowed = {
       ...defaultSettings,
       ...body,
+      pickupAddress: String(body.pickupAddress ?? defaultSettings.pickupAddress).trim().slice(0, 500) || defaultSettings.pickupAddress,
+      pickupHours: String(body.pickupHours ?? '').trim().slice(0, 240),
       country:'Nigeria',
       deliveryCountries:['Nigeria'],
       deliveryFeesByState,
