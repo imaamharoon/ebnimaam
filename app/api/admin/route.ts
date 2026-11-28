@@ -5,6 +5,7 @@ import { createAdminSession, isAdminRequest, ADMIN_SESSION_MAX_AGE } from '../..
 import { checkRateLimit } from '../../../lib/rate-limit';
 import { getRecentAdminActivity, recordAdminActivity } from '../../../lib/admin-audit';
 import { ensureOrderEmailEventsTable, isOrderEmailConfigured, sendOrderStatusEmail } from '../../../lib/order-notifications';
+import { notifyOrder } from '../../../lib/push-notifications';
 
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
@@ -209,6 +210,13 @@ export async function PATCH(req: Request) {
 
     if (changed) {
       await recordAdminActivity('order.fulfilment.updated', 'order', reference, { from: previous, to: fulfilmentStatus });
+      const pushMessage = fulfilmentStatus === 'shipped' ? 'Your order has been dispatched.'
+        : fulfilmentStatus === 'delivered' ? 'Your order has been marked delivered.'
+        : fulfilmentStatus === 'ready_for_pickup' ? 'Your order is ready for collection.'
+        : fulfilmentStatus === 'collected' ? 'Your collection is complete.'
+        : fulfilmentStatus === 'cancelled' ? 'Your order status has changed to cancelled.'
+        : 'Your order has moved to ' + fulfilmentStatus.replace(/_/g,' ') + '.';
+      await notifyOrder(reference,'Ebnimaam · Order update',pushMessage).catch(()=>{});
     }
     let emailResult: { deliveryStatus: string; reason?: string } = { deliveryStatus: 'not_requested' };
     if (changed && ['picked', 'shipped', 'delivered', 'cancelled', 'ready_for_pickup', 'collected'].includes(fulfilmentStatus)) {
