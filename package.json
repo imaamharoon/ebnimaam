@@ -15,14 +15,16 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "nodemailer": "^10.6.1",
-    "@simplewebauthn/server": "^14.1.0"
+    "@simplewebauthn/server": "^14.1.0",
+    "web-push": "^4.0.0"
   },
   "devDependencies": {
     "typescript": "^5.5.4",
     "@types/node": "^20.14.10",
     "@types/react": "^18.3.3",
     "@types/pg": "^8.11.6",
-    "@types/nodemailer": "^8.0.2"
+    "@types/nodemailer": "^8.0.2",
+    "@types/web-push": "^3.6.4"
   },
   "overrides": {
     "postcss": "8.5.33"
