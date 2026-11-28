@@ -13,19 +13,12 @@ let gameSchemaReady: Promise<void> | null = null;
 
 async function ensureGameSchema() {
   if (!gameSchemaReady) {
-    gameSchemaReady = pool.query(`
-      CREATE TABLE IF NOT EXISTS public.ebnimaam_game_attempts(
-        id UUID PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        sequence JSONB NOT NULL,
-        options JSONB NOT NULL,
-        answer INTEGER NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        expires_at TIMESTAMPTZ NOT NULL,
-        completed_at TIMESTAMPTZ,
-        result TEXT CHECK(result IN ('won','miss','expired'))
-      )
-    `).then(async () => {
+    gameSchemaReady = pool.query(
+      "CREATE TABLE IF NOT EXISTS public.ebnimaam_game_attempts(" +
+      "id UUID PRIMARY KEY,user_id TEXT NOT NULL,sequence JSONB NOT NULL,options JSONB NOT NULL," +
+      "answer INTEGER NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),expires_at TIMESTAMPTZ NOT NULL," +
+      "completed_at TIMESTAMPTZ,result TEXT CHECK(result IN ('won','miss','expired')))"
+    ).then(async () => {
       await pool.query('ALTER TABLE public.ebnimaam_game_attempts ADD COLUMN IF NOT EXISTS stage SMALLINT NOT NULL DEFAULT 1');
       await pool.query('CREATE INDEX IF NOT EXISTS ebnimaam_game_user_day_idx ON public.ebnimaam_game_attempts(user_id,created_at DESC)');
     }).then(() => undefined).catch((error) => {
@@ -63,8 +56,8 @@ function makePuzzle(stage: number) {
     ];
   } else if (stage === 2) {
     // Chunin: three interleaved arithmetic progressions of gaps.
-    const starts = [randomInt(3, 8),randomInt(8, 14),randomInt(14, 21)];
-    const growths = [randomInt(3, 6),randomInt(2, 5),randomInt(4, 7)];
+    const starts = [randomInt(3, 8), randomInt(8, 14), randomInt(14, 21)];
+    const growths = [randomInt(3, 6), randomInt(2, 5), randomInt(4, 7)];
     for (let step = 0; step < 9; step += 1) {
       const lane = step % 3;
       const cycle = Math.floor(step / 3);
@@ -86,7 +79,7 @@ function makePuzzle(stage: number) {
     const evenOffset = randomInt(1, 4);
     const oddOffset = randomInt(4, 8);
     sequence.push(start + randomInt(5, 13));
-    const offsetFor = (termIndex:number) => offsetBase + Math.floor((termIndex - 2) / 2) * growth + (termIndex % 2 === 0 ? evenOffset : oddOffset);
+    const offsetFor = (termIndex: number) => offsetBase + Math.floor((termIndex - 2) / 2) * growth + (termIndex % 2 === 0 ? evenOffset : oddOffset);
     for (let termIndex = 2; termIndex <= 8; termIndex += 1) {
       sequence.push(sequence[termIndex - 1] + sequence[termIndex - 2] + offsetFor(termIndex));
     }
@@ -101,31 +94,33 @@ function makePuzzle(stage: number) {
   }
 
   const choices = new Set<number>([answer]);
-  for (const option of distractors) if (Number.isSafeInteger(option) && option > 0 && option !== answer) choices.add(option);
+  for (const option of distractors) {
+    if (Number.isSafeInteger(option) && option > 0 && option !== answer) choices.add(option);
+  }
   while (choices.size < 4) {
     const candidate = answer + (randomInt(0, 2) ? 1 : -1) * randomInt(3, 26);
     if (candidate > 0 && candidate !== answer) choices.add(candidate);
   }
-  const options = Array.from(choices).slice(0,4);
+  const options = Array.from(choices).slice(0, 4);
   for (let index = options.length - 1; index > 0; index -= 1) {
     const swap = randomInt(0, index + 1);
     [options[index], options[swap]] = [options[swap], options[index]];
   }
   const meta = stage === 1
-    ? { stageName:'Genin Trial', opponent:'The Academy Gatekeeper', mission:'Read both alternating growth patterns and predict the next seal.' }
+    ? { stageName: 'Genin Trial', opponent: 'The Academy Gatekeeper', mission: 'Read both alternating growth patterns and predict the next seal.' }
     : stage === 2
-      ? { stageName:'Chunin Trial', opponent:'The Three-Tail Strategist', mission:'Track three separate gap progressions across the sequence.' }
-      : { stageName:'Shadow Boss', opponent:'The Eclipse Master', mission:'Unravel the growing recurrence. Every term carries information from the previous two.' };
+      ? { stageName: 'Chunin Trial', opponent: 'The Three-Tail Strategist', mission: 'Track three separate gap progressions across the sequence.' }
+      : { stageName: 'Shadow Boss', opponent: 'The Eclipse Master', mission: 'Unravel the growing recurrence. Every term carries information from the previous two.' };
   return { sequence, options, answer, stage, ...meta };
 }
 
 async function getRewardStatus(userId: string) {
   const result = await pool.query(
-    `SELECT
-       (SELECT COUNT(*)::int FROM public.ebnimaam_game_attempts WHERE user_id=$1 AND created_at >= ${NIGERIA_DAY_START}) AS attempts,
-       (SELECT COUNT(*)::int FROM public.ebnimaam_game_attempts WHERE user_id=$1 AND created_at >= ${NIGERIA_DAY_START} AND result='won') AS stages_cleared,
-       EXISTS(SELECT 1 FROM public.ebnimaam_wallet_ledger WHERE user_id=$1 AND entry_type='game_reward' AND direction='credit' AND created_at >= ${NIGERIA_DAY_START}) AS rewarded,
-       (SELECT game_reward_kobo FROM public.ebnimaam_loyalty_settings WHERE id=1) AS reward_kobo`,
+    "SELECT " +
+    "(SELECT COUNT(*)::int FROM public.ebnimaam_game_attempts WHERE user_id=$1 AND created_at >= " + NIGERIA_DAY_START + ") AS attempts," +
+    "(SELECT COUNT(*)::int FROM public.ebnimaam_game_attempts WHERE user_id=$1 AND created_at >= " + NIGERIA_DAY_START + " AND result='won') AS stages_cleared," +
+    "EXISTS(SELECT 1 FROM public.ebnimaam_wallet_ledger WHERE user_id=$1 AND entry_type='game_reward' AND direction='credit' AND created_at >= " + NIGERIA_DAY_START + ") AS rewarded," +
+    "(SELECT game_reward_kobo FROM public.ebnimaam_loyalty_settings WHERE id=1) AS reward_kobo",
     [userId],
   );
   return {
@@ -156,8 +151,8 @@ export async function GET(req: Request) {
     const puzzle = makePuzzle(stage);
     const attemptId = randomUUID();
     await pool.query(
-      `INSERT INTO public.ebnimaam_game_attempts(id,user_id,sequence,options,answer,expires_at,stage)
-       VALUES($1,$2,$3::jsonb,$4::jsonb,$5,NOW()+INTERVAL '5 minutes',$6)`,
+      "INSERT INTO public.ebnimaam_game_attempts(id,user_id,sequence,options,answer,expires_at,stage) " +
+      "VALUES($1,$2,$3::jsonb,$4::jsonb,$5,NOW()+INTERVAL '5 minutes',$6)",
       [attemptId, user.id, JSON.stringify(puzzle.sequence), JSON.stringify(puzzle.options), puzzle.answer, stage],
     );
     return NextResponse.json({
@@ -205,15 +200,51 @@ export async function POST(req: Request) {
     if (new Date(attempt.expires_at).getTime() < Date.now()) {
       await client.query("UPDATE public.ebnimaam_game_attempts SET completed_at=NOW(),result='expired' WHERE id=$1", [attemptId]);
       await client.query('COMMIT');
+      return NextResponse.json({ error: 'This challenge expired. Start a new one.' }, { status: 410 });
+    }
+    const options = Array.isArray(attempt.options) ? attempt.options.map(Number) : [];
+    if (!options.includes(answer)) throw new Error('Choose one of the four displayed answers.');
+    const correct = Number(attempt.answer) === answer;
+    let rewardKobo = 0;
+    let alreadyRewarded = false;
+    if (correct) {
+      const settings = await client.query('SELECT game_reward_kobo FROM public.ebnimaam_loyalty_settings WHERE id=1');
+      const configuredReward = Number(settings.rows[0]?.game_reward_kobo || 0);
+      const priorReward = await client.query(
+        "SELECT 1 FROM public.ebnimaam_wallet_ledger WHERE user_id=$1 AND entry_type='game_reward' AND direction='credit' AND created_at >= " + NIGERIA_DAY_START + " LIMIT 1",
+        [user.id],
+      );
+      alreadyRewarded = Boolean(priorReward.rowCount);
+      if (!alreadyRewarded && configuredReward > 0) {
+        const day = await client.query("SELECT to_char((NOW() AT TIME ZONE 'Africa/Lagos')::date,'YYYYMMDD') AS day_key");
+        rewardKobo = configuredReward;
+        await addWalletEntry(client, {
+          userId: user.id,
+          entryType: 'game_reward',
+          direction: 'credit',
+          amountKobo: rewardKobo,
+          reference: 'game-reward-' + String(day.rows[0]?.day_key || 'today') + '-' + user.id,
+          description: 'Daily Pattern Challenge reward',
+          metadata: { attemptId, game: 'daily-pattern-challenge', storeOnly: true },
+        });
+      } else if (alreadyRewarded) {
+        rewardKobo = 0;
+      }
+    }
+    await client.query(
+      "UPDATE public.ebnimaam_game_attempts SET completed_at=NOW(),result=$1 WHERE id=$2",
+      [correct ? 'won' : 'miss', attemptId],
+    );
+    await client.query('COMMIT');
     const updatedStatus = await getRewardStatus(user.id);
     return NextResponse.json({
       correct,
-      stage: Number(attempt.stage||1),
+      stage: Number(attempt.stage || 1),
       answer: Number(attempt.answer),
       rewardKobo,
       alreadyRewarded,
       stagesCleared: updatedStatus.stagesCleared,
-      attemptsLeft: Math.max(0,MAX_ATTEMPTS_PER_DAY-updatedStatus.attempts),
+      attemptsLeft: Math.max(0, MAX_ATTEMPTS_PER_DAY - updatedStatus.attempts),
       completedAll: updatedStatus.stagesCleared >= 3,
       message: correct ? 'Correct answer.' : 'Not quite. Try another challenge.',
     }, { headers: { 'cache-control': 'no-store' } });
