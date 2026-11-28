@@ -53,10 +53,11 @@ function quickReply(question: string, context: any = {}) {
     return 'To place an order, sign in with your verified Ebnimaam account, add available products to your bag, open checkout and enter your Nigerian delivery or pickup details. Pay securely through Paystack. Your order is confirmed only after Paystack verification.';
   }
   if (/(delivery|shipping|dispatch|arrive|how long|when.*come|delivery fee)/.test(q)) {
-    const state = String(context.deliveryState||'').trim();
-    const fees = context.deliveryFeesByState||{};
-    const fee = state ? fees[state] : null;
-    return 'Delivery is available in Nigeria. Select your state at checkout to see the configured delivery fee before you pay. '+(fee!==undefined&&fee!==null?'The current configured fee for '+state+' is ₦'+Number(fee).toLocaleString('en-NG')+'. ':'')+'Use /account.html to view the tracking updates attached to your own order. Delivery timing depends on the store’s configured rules and any courier tracking update.';
+    const states=['Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno','Cross River','Delta','Ebonyi','Edo','Ekiti','Enugu','FCT - Abuja','Gombe','Imo','Jigawa','Kaduna','Kano','Katsina','Kebbi','Kogi','Kwara','Lagos','Nasarawa','Niger','Ogun','Ondo','Osun','Oyo','Plateau','Rivers','Sokoto','Taraba','Yobe','Zamfara'];
+    const state=String(context.deliveryState||states.find((value:string)=>q.includes(value.toLowerCase()))||'').trim();
+    const fees=context.deliveryFeesByState||{};
+    const fee=state?fees[state]:fees.default;
+    return 'Delivery is available in Nigeria. Select your state at checkout to see the configured delivery fee before you pay. '+(fee!==undefined&&fee!==null?'The current configured fee'+(state?' for '+state:' for other states')+' is ₦'+Number(fee).toLocaleString('en-NG')+'. ':'I cannot verify a saved price for that state from the current settings. ')+'Use /account.html to view the tracking updates attached to your own order. Delivery timing depends on the store’s configured rules and any courier tracking update.';
   }
   if (/(pickup|pick up|collect|collection)/.test(q)) {
     return context.pickupAddress
@@ -186,7 +187,7 @@ export async function POST(req: Request) {
         dailyPatternChallenge:{rewardNaira:Number(loyaltySettingsResult.rows[0]?.game_reward_kobo||5000)/100,rewardLimit:'one successful reward per customer per Africa/Lagos calendar day',cashWithdrawalAllowed:false}},null,2),
       'For wallet ledger, referral status and team challenge participation details, ask the signed-in customer to open /rewards.html. The supplied wallet figure is available credit only; never infer rewards from orders.',
     ].join('\\n');
-    const quickContext={products:catalogueContext,deliveryFeesByState:storeSettings.deliveryFeesByState||{},pickupAddress:storeSettings.pickupAddress||'',pickupHours:storeSettings.pickupHours||'',supportEmail:storeSettings.supportEmail||'ebnimaam.com@gmail.com',availableCoupons:couponsContext,ownOrders:orderContext,storeSettings};
+    const quickContext={products:catalogueContext,deliveryFeesByState:storeSettings.deliveryFeesByState||{},pickupAddress:storeSettings.pickupAddress||'',pickupHours:storeSettings.pickupHours||'',supportEmail:storeSettings.supportEmail||'ebnimaam.com@gmail.com',availableCoupons:couponsContext,ownOrders:orderContext,pushNotificationsConfigured:Boolean(process.env.VAPID_PUBLIC_KEY&&process.env.VAPID_PRIVATE_KEY),storeSettings};
     if (!apiKey) {
       return NextResponse.json({ reply: quickReply(messages[messages.length - 1].text, quickContext), mode: 'quick-help' });
     }
@@ -211,7 +212,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ reply: quickReply(messages[messages.length - 1].text, quickContext), mode: 'quick-help' });
     }
     const reply = String(data?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-    return NextResponse.json({ reply: reply.slice(0, 2400) || quickReply(messages[messages.length - 1].text), mode: 'gemini' });
+    return NextResponse.json({ reply: reply.slice(0, 2400) || quickReply(messages[messages.length - 1].text, quickContext), mode: 'gemini' });
   } catch {
     return NextResponse.json({ error: 'Network error reaching support. Please use WhatsApp.' }, { status: 503 });
   }
