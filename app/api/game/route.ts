@@ -197,6 +197,14 @@ export async function POST(req: Request) {
     if (!found.rowCount) throw new Error('This challenge was not found. Start a new one.');
     const attempt = found.rows[0];
     if (attempt.completed_at) throw new Error('This challenge has already been submitted. Start a new one.');
+    const cleared = await client.query(
+      "SELECT COUNT(*)::int AS total FROM public.ebnimaam_game_attempts WHERE user_id=$1 AND created_at >= " + NIGERIA_DAY_START + " AND result='won'",
+      [user.id],
+    );
+    const nextStage = Math.min(3, Number(cleared.rows[0]?.total || 0) + 1);
+    if (Number(attempt.stage || 1) !== nextStage) {
+      throw new Error('This rank has already been cleared or is no longer current. Start the next available trial.');
+    }
     if (new Date(attempt.expires_at).getTime() < Date.now()) {
       await client.query("UPDATE public.ebnimaam_game_attempts SET completed_at=NOW(),result='expired' WHERE id=$1", [attemptId]);
       await client.query('COMMIT');
