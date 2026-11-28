@@ -74,8 +74,62 @@ async function claimReferralFromInvite(){
   if(new URLSearchParams(location.search).has('ref')){const url=new URL(location.href);url.searchParams.delete('ref');history.replaceState(history.state,'',url.toString())}
  }catch{}
 }
-async function checkSession(){try{const r=await fetch('/api/auth/get-session',{credentials:'same-origin',cache:'no-store'});if(!r.ok)throw new Error('Unable to check your sign-in status.');const d=await r.json();currentUser=(d.user&&d.user.emailVerified===true)?d.user:null;if(currentUser){$('authCard').classList.add('hide');$('welcomeCard').classList.add('hide');$('accountCard').classList.remove('hide');$('profile').innerHTML='<b>'+escapeHtml(currentUser.name||'Ebnimaam customer')+'</b><br>'+escapeHtml(currentUser.email||'');try{await fetch('/api/loyalty',{credentials:'same-origin',cache:'no-store'})}catch{}await claimReferralFromInvite();loadProfile();if(window.parent!==window)window.parent.postMessage({type:'ebnimaam-account-authenticated'},location.origin)}else{$('accountCard').classList.add('hide');$('authCard').classList.remove('hide')}}catch(e){currentUser=null;$('accountCard').classList.add('hide');$('welcomeCard').classList.add('hide');$('authCard').classList.remove('hide');notice('We could not check your session. You can try signing in again or reload the page.')}}
+async function checkSession(){try{const r=await fetch('/api/auth/get-session',{credentials:'same-origin',cache:'no-store'});if(!r.ok)throw new Error('Unable to check your sign-in status.');const d=await r.json();currentUser=(d.user&&d.user.emailVerified===true)?d.user:null;if(currentUser){$('authCard').classList.add('hide');$('welcomeCard').classList.add('hide');$('accountCard').classList.remove('hide');$('profile').innerHTML='<b>'+escapeHtml(currentUser.name||'Ebnimaam customer')+'</b><br>'+escapeHtml(currentUser.email||'');try{await fetch('/api/loyalty',{credentials:'same-origin',cache:'no-store'})}catch{}await claimReferralFromInvite();loadProfile();await loadPasskeys();if(window.parent!==window)window.parent.postMessage({type:'ebnimaam-account-authenticated'},location.origin)}else{$('accountCard').classList.add('hide');$('authCard').classList.remove('hide')}}catch(e){currentUser=null;$('accountCard').classList.add('hide');$('welcomeCard').classList.add('hide');$('authCard').classList.remove('hide');notice('We could not check your session. You can try signing in again or reload the page.')}}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function base64UrlToBytes(value){const padded=String(value).replace(/-/g,'+').replace(/_/g,'/');const binary=atob(padded+'='.repeat((4-padded.length%4)%4));return Uint8Array.from(binary,ch=>ch.charCodeAt(0))}
+function bytesToBase64Url(value){const bytes=new Uint8Array(value);let binary='';bytes.forEach(byte=>binary+=String.fromCharCode(byte));return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+function passkeyOptionsForCreate(options){return {...options,challenge:base64UrlToBytes(options.challenge),user:{...options.user,id:base64UrlToBytes(options.user.id)},excludeCredentials:(options.excludeCredentials||[]).map(item=>({...item,id:base64UrlToBytes(item.id)}))}}
+function passkeyOptionsForGet(options){return {...options,challenge:base64UrlToBytes(options.challenge),allowCredentials:(options.allowCredentials||[]).map(item=>({...item,id:base64UrlToBytes(item.id)}))}}
+function passkeyCredentialJson(credential){
+ const response=credential.response;
+ const result={id:credential.id,rawId:bytesToBase64Url(credential.rawId),type:credential.type,authenticatorAttachment:credential.authenticatorAttachment,clientExtensionResults:credential.getClientExtensionResults(),response:{clientDataJSON:bytesToBase64Url(response.clientDataJSON)}};
+ if(response.attestationObject){result.response.attestationObject=bytesToBase64Url(response.attestationObject);result.response.transports=response.getTransports?response.getTransports():[]}
+ else{result.response.authenticatorData=bytesToBase64Url(response.authenticatorData);result.response.signature=bytesToBase64Url(response.signature);result.response.userHandle=response.userHandle?bytesToBase64Url(response.userHandle):null}
+ return result;
+}
+async function registerPasskey(){
+ if(!window.PublicKeyCredential||!navigator.credentials)return notice('This browser does not support passkeys. You can continue with password and email OTP.',true);
+ const button=document.querySelector('#passkeySettings .passkey-button');button.disabled=true;button.textContent='Preparing secure passkey…';
+ try{
+  const optionsResponse=await fetch('/api/passkeys',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({action:'registration-options'})});
+  const options=await optionsResponse.json();if(!optionsResponse.ok)throw new Error(options.error||'Could not start passkey setup.');
+  const credential=await navigator.credentials.create({publicKey:passkeyOptionsForCreate(options)});if(!credential)throw new Error('Passkey creation was cancelled.');
+  const response=await fetch('/api/passkeys',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({action:'registration-verify',credential:passkeyCredentialJson(credential)})});
+  const result=await response.json();if(!response.ok)throw new Error(result.error||'Passkey could not be saved.');
+  notice(result.message||'Passkey saved.',true);await loadPasskeys();
+ }catch(error){notice(error.message||'Passkey setup failed.',true)}
+ finally{button.disabled=false;button.textContent='Add a passkey to this device'}
+}
+async function loginWithPasskey(){
+ if(!window.PublicKeyCredential||!navigator.credentials)return notice('Passkeys are not supported in this browser. Use your password and email OTP.');
+ const email=document.querySelector('#authForm input[name=email]').value.trim();
+ if(!email)return notice('Enter your account email first, then choose Use passkey / Face ID.');
+ const button=document.querySelector('#passkeyLogin button');button.disabled=true;button.textContent='Waiting for device verification…';
+ try{
+  const first=await fetch('/api/passkeys',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({action:'authentication-options',email})});
+  const options=await first.json();if(!first.ok)throw new Error(options.error||'Passkey sign-in could not start.');
+  const credential=await navigator.credentials.get({publicKey:passkeyOptionsForGet(options)});if(!credential)throw new Error('Passkey verification was cancelled.');
+  const second=await fetch('/api/passkeys',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({action:'authentication-verify',email,credential:passkeyCredentialJson(credential)})});
+  const result=await second.json();if(!second.ok)throw new Error(result.error||'Passkey verification failed.');
+  await checkSession();if(currentUser){notice('Passkey verified. You are signed in securely.');continueAfterAccountAuth()}else throw new Error('Your passkey was verified but the account session could not be restored. Try password and OTP sign-in.');
+ }catch(error){notice(error.message||'Passkey sign-in failed.')}
+ finally{button.disabled=false;button.textContent='Use passkey / Face ID'}
+}
+async function loadPasskeys(){
+ const el=$('passkeyList');if(!el||!currentUser)return;
+ try{
+  const r=await fetch('/api/passkeys',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({action:'list'})});
+  const d=await r.json();if(!r.ok)throw new Error(d.error||'Saved passkeys unavailable.');
+  el.innerHTML=(d.passkeys||[]).length?(d.passkeys||[]).map(item=>'<div class="passkey-item"><span>Passkey · '+escapeHtml(item.deviceType||'device')+' · '+(item.backedUp?'synced':'device-only')+'</span><button type="button" onclick="removePasskey(\\''+item.credentialId+'\\')">Remove</button></div>').join(''):'<p class="muted">No passkey has been saved yet.</p>';
+ }catch(error){el.textContent=error.message||'Could not load passkeys.'}
+}
+async function removePasskey(id){
+ if(!confirm('Remove this passkey from your Ebnimaam account?'))return;
+ const r=await fetch('/api/passkeys',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({action:'remove',credentialId:id})});
+ const d=await r.json();if(!r.ok){notice(d.error||'Passkey could not be removed.',true);return}
+ notice('Passkey removed.',true);await loadPasskeys();
+}
+
 async function social(provider){try{const r=await fetch('/api/auth/sign-in/social',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({provider,callbackURL:location.origin+'/account.html'})});const d=await r.json();if(!r.ok)throw new Error(d.message||d.error||'Social sign-in is unavailable.');if(d.url)location.href=d.url;else notice('Could not start Google sign-in.')}catch(e){notice(e.message)}}
 async function loadProfile(){
  try{
