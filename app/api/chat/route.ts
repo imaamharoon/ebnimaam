@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     }
 
     const neonToken = process.env.NEON_AI_GATEWAY_TOKEN || '';
-    const neonBase = String(process.env.NEON_AI_GATEWAY_BASE_URL || '').replace(/\\/+$/,'');
+    let neonBase = String(process.env.NEON_AI_GATEWAY_BASE_URL || ''); while (neonBase.endsWith('/')) neonBase = neonBase.slice(0, -1);
     const neonModel = String(process.env.NEON_AI_GATEWAY_MODEL || 'gpt-5-mini').replace(/[^a-zA-Z0-9._:/-]/g,'');
     const geminiKey = process.env.GEMINI_API_KEY || process.env.Gemini_Api_key || '';
     const geminiModel = String(process.env.GEMINI_MODEL || 'gemini-3.8-flash').replace(/[^a-zA-Z0-9._-]/g,'');
