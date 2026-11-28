@@ -7,7 +7,7 @@ import { checkRateLimit } from '../../../lib/rate-limit';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 4 });
-const MAX_ATTEMPTS_PER_DAY = 3;
+const MAX_ATTEMPTS_PER_DAY = 5;
 const NIGERIA_DAY_START = "(date_trunc('day', NOW() AT TIME ZONE 'Africa/Lagos') AT TIME ZONE 'Africa/Lagos')";
 let gameSchemaReady: Promise<void> | null = null;
 
@@ -150,7 +150,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ completedAll: true, rewardedToday: status.rewarded, attemptsLeft: Math.max(0, MAX_ATTEMPTS_PER_DAY - status.attempts) }, { headers: { 'cache-control': 'no-store' } });
     }
     if (status.attempts >= MAX_ATTEMPTS_PER_DAY) {
-      return NextResponse.json({ error: status.stagesCleared ? 'Your daily attempts are complete. Return tomorrow to continue your trials.' : 'You have used all three attempts for today. Come back tomorrow.', attemptsLeft: 0 }, { status: 429 });
+      return NextResponse.json({ error: status.stagesCleared ? 'Your daily attempts are complete. Return tomorrow to continue your trials.' : 'You have used all five attempts for today. Come back tomorrow.', attemptsLeft: 0 }, { status: 429 });
     }
     const stage = Math.min(3, status.stagesCleared + 1);
     const puzzle = makePuzzle(stage);
