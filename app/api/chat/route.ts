@@ -7,6 +7,7 @@ import { ensureCouponsSchema } from '../../../lib/coupons';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 4 });
+function safeJson(value:any){if(value&&typeof value==='object')return value;try{return JSON.parse(String(value||'{}'))}catch{return {}}}
 
 const STORE_INSTRUCTIONS = [
   'You are Ebnimaam AI, the friendly website-wide shopping, product-discovery and customer-support guide for Ebnimaam, a Nigeria-only online store.',
@@ -173,7 +174,7 @@ export async function POST(req: Request) {
     const liveContext = [
       'LIVE EBNIMAAM WEBSITE CONTEXT (use only these facts; if missing say you cannot verify):',
       JSON.stringify({storeName:'Ebnimaam',country:'Nigeria',pickupAddress:storeSettings.pickupAddress||'',
-        pickupHours:storeSettings.pickupHours||'',supportEmail:storeSettings.supportEmail||'ebnimaam.com@gmail.com',
+        pickupHours:storeSettings.pickupHours||'',supportEmail:storeSettings.supportEmail||'ebnimaam.com@gmail.com',pushNotificationsConfigured:Boolean(process.env.VAPID_PUBLIC_KEY&&process.env.VAPID_PRIVATE_KEY),
         supportPhone:storeSettings.supportPhone||'08145672755',socialLinks:storeSettings.socialLinks||{},pickupAddressConfirmed:storeSettings.pickupAddressConfirmed===true,pickupAddress:storeSettings.pickupAddress||'',pickupHours:storeSettings.pickupHours||'',deliveryFeesByState:storeSettings.deliveryFeesByState||{},
         deliveryRules:storeSettings.deliveryRules||'',returnsPolicy:storeSettings.returnsPolicy||'',shippingPolicy:storeSettings.shippingPolicy||'',
         terms:storeSettings.terms||'',promotions:storeSettings.promotions||[],availableCoupons:couponsContext,activeTeamChallenges:challengesContext,products:catalogueContext,news:newsContext,publishedProductQuestions:questionsContext,publishedProductReviews:reviewsContext,ownSupportTickets:ownSupportContext,
