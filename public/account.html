@@ -120,7 +120,8 @@ async function loadPasskeys(){
  try{
   const r=await fetch('/api/passkeys',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({action:'list'})});
   const d=await r.json();if(!r.ok)throw new Error(d.error||'Saved passkeys unavailable.');
-  el.innerHTML=(d.passkeys||[]).length?(d.passkeys||[]).map(item=>'<div class="passkey-item"><span>Passkey · '+escapeHtml(item.deviceType||'device')+' · '+(item.backedUp?'synced':'device-only')+'</span><button type="button" onclick="removePasskey(\\''+item.credentialId+'\\')">Remove</button></div>').join(''):'<p class="muted">No passkey has been saved yet.</p>';
+  el.innerHTML=(d.passkeys||[]).length?(d.passkeys||[]).map(item=>'<div class="passkey-item"><span>Passkey · '+escapeHtml(item.deviceType||'device')+' · '+(item.backedUp?'synced':'device-only')+'</span><button type="button" data-passkey-id="'+escapeHtml(item.credentialId)+'">Remove</button></div>').join(''):'<p class="muted">No passkey has been saved yet.</p>';
+  el.querySelectorAll('[data-passkey-id]').forEach(button=>button.addEventListener('click',()=>removePasskey(button.getAttribute('data-passkey-id'))));
  }catch(error){el.textContent=error.message||'Could not load passkeys.'}
 }
 async function removePasskey(id){
