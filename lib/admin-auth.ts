@@ -8,7 +8,7 @@ export function createAdminSession(secret: string) {
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
   return expiresAt + '.' + signature(expiresAt, secret);
 }
-export function isAdminRequest(req: Request, secret = process.env.ADMIN_PASSWORD || '') {
+export function isAdminRequest(req: Request, secret = process.env.ADMIN_PASSWORD || process.env.AUTH_SECRET || '') {
   if (!secret) return false;
   const match = (req.headers.get('cookie') || '').match(/(?:^|;\s*)ebn_admin=([^;]+)/);
   if (!match) return false;

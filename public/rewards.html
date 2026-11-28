@@ -6,7 +6,44 @@
 <style>
 :root{--navy:#102544;--gold:#c99550;--cream:#faf8f2;--paper:#fffefa;--ink:#243141;--muted:#6c7683;--line:#e7e1d6}*{box-sizing:border-box}body{margin:0;background:var(--cream);color:var(--ink);font:14px/1.6 Arial,sans-serif}.top{background:var(--navy);color:white;padding:18px max(18px,calc((100vw - 1050px)/2));display:flex;align-items:center;justify-content:space-between;gap:12px}.top a{color:white}.wrap{max-width:1050px;margin:auto;padding:22px 16px 60px}h1,h2,h3{color:var(--navy)}h1{font-size:clamp(28px,5vw,40px);line-height:1.15;margin:6px 0}h2{margin:0 0 12px}h3{margin:0 0 8px}.muted{color:var(--muted);font-size:13px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:18px;margin:14px 0}.balance{background:var(--navy);color:#fff;border-radius:14px;padding:22px}.balance h2,.balance p{color:#fff}.amount{font-size:34px;font-weight:700;letter-spacing:-.04em}.pill{display:inline-block;padding:4px 9px;border-radius:999px;background:#f1eee7;color:var(--navy);font-size:11px}.field{display:grid;gap:5px;margin:12px 0}.field input,.field textarea,.field select{width:100%;border:1px solid var(--line);border-radius:8px;padding:12px;background:white;color:var(--ink);font:inherit}.btn{border:0;border-radius:8px;padding:11px 15px;background:var(--navy);color:white;font-weight:700;cursor:pointer}.btn.alt{background:white;color:var(--navy);border:1px solid var(--line)}.btn:disabled{opacity:.5}.notice{background:#f1eee7;border-radius:8px;padding:12px;margin:12px 0;white-space:pre-wrap}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.ledger{border-top:1px solid var(--line);padding:10px 0;display:flex;justify-content:space-between;gap:12px}.ledger:first-child{border-top:0}.credit{color:#16834f}.debit{color:#ad4c3f}.team{border:1px solid var(--line);border-radius:10px;padding:14px;margin:10px 0}.team h3{margin:0}.milestone{padding:10px 0;border-top:1px solid var(--line)}.milestone:first-child{border:0}.hidden{display:none!important}a{color:#936b38}@media(max-width:680px){.grid{grid-template-columns:1fr}.top{padding:14px 16px}.amount{font-size:29px}}
 </style>
-</head>
+<style id="anime-shadow-trials">
+@keyframes animeEmblem{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-7px) rotate(3deg)}}
+@keyframes animeStagePulse{0%,100%{box-shadow:0 0 0 0 #d9a54a00}50%{box-shadow:0 0 0 5px #d9a54a2c}}
+@keyframes animeGlow{0%,100%{text-shadow:0 0 6px #f0c46b35}50%{text-shadow:0 0 15px #f0c46b9c}}
+.anime-game{position:relative;overflow:hidden;background:radial-gradient(circle at 85% 12%,#204b70 0,transparent 34%),linear-gradient(155deg,#0a203b 0%,#08172d 66%,#111d34 100%);color:#f5f0e6;border:1px solid #c9984c;box-shadow:0 20px 48px #071a3138}
+.anime-game:before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.18;background-image:linear-gradient(120deg,transparent 0 46%,#efc66b 47%,transparent 48%),radial-gradient(circle at 5% 8%,#f2c76a 0 1px,transparent 2px),radial-gradient(circle at 91% 63%,#f2c76a 0 1px,transparent 2px);background-size:100% 100%,34px 34px,47px 47px}
+.anime-game>*{position:relative}
+.anime-game-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.anime-kicker{font-size:9px;font-weight:900;letter-spacing:.2em;color:#e6b95f}
+.anime-game-header h2{font:700 29px Georgia,serif;color:#f3c96f;margin:7px 0}
+.anime-game-header p{font-size:11px;color:#d2dbea;max-width:440px;margin:0}
+.anime-emblem{width:58px;height:58px;display:grid;place-items:center;border:1px solid #d4a34e;border-radius:50%;color:#f2c86c;font:30px Georgia,serif;background:#f0be4c12;animation:animeEmblem 4s ease-in-out infinite}
+.anime-game-map{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:19px 0}
+.anime-stage{display:flex;flex-direction:column;gap:4px;padding:10px 9px;border:1px solid #ffffff25;border-radius:10px;background:#ffffff08;min-width:0}
+.anime-stage span{font-size:9px;color:#e7bc64;letter-spacing:.12em}
+.anime-stage b{color:#fff;font-size:12px}
+.anime-stage small{font-size:9px;color:#aebbd0;line-height:1.3}
+.anime-stage.active{border-color:#e7b65a;background:linear-gradient(135deg,#d5a2492c,#d5a24909);animation:animeStagePulse 2.4s infinite}
+.anime-opponent{display:flex;align-items:center;gap:12px;border:1px solid #e6b85b50;border-radius:12px;padding:11px;background:#061529a6;margin:12px 0}
+.anime-avatar{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#f3ca72,#a76b24);color:#10223c;font:23px Georgia,serif;flex:0 0 44px}
+.anime-opponent b{display:block;color:#f5d58e;font-size:12px}
+.anime-opponent small{display:block;color:#c7d1df;font-size:10px;line-height:1.4;margin-top:4px}
+.anime-game-status{display:flex;align-items:center;gap:12px;border-bottom:1px solid #ffffff20;padding:7px 0 12px}
+.anime-rank{font-size:10px;letter-spacing:.12em;font-weight:900;color:#f3c96f;white-space:nowrap}
+.anime-game-status .muted{color:#c9d4e2;font-size:10px}
+.anime-game .notice{background:#ffffff0b;border:1px solid #ffffff20;color:#f5f0e6;border-radius:9px;margin:13px 0}
+.anime-scroll{padding:16px 13px;border-radius:13px;background:linear-gradient(145deg,#f9f3e7,#e7dcc8);color:#0c2039;border:1px solid #d5a249;box-shadow:inset 0 0 0 4px #ffffff80;margin:12px 0}
+.anime-sequence-label{text-align:center;color:#9b6a26;font-size:9px;letter-spacing:.13em;font-weight:900;margin:0 0 13px}
+.anime-sequence{font:700 clamp(18px,4vw,27px) Georgia,serif;letter-spacing:.055em;text-align:center;color:#0b2340;margin:0;overflow-wrap:anywhere;line-height:1.6}
+.anime-options{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.anime-options button{border:1px solid #c99550;background:linear-gradient(145deg,#1a3658,#0c2039);color:#f4d18a;border-radius:11px;padding:14px 5px;font-weight:900;font-size:17px;box-shadow:0 5px 12px #0003}
+.anime-options button:disabled{opacity:.55}
+.anime-options button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.anime-game-footer{display:flex;flex-wrap:wrap;gap:14px;margin:14px 0;color:#aebbd0;font-size:9px}
+.anime-start{width:100%;background:linear-gradient(120deg,#f2ce7b,#b77a2c)!important;color:#10213a!important;border:1px solid #e6bd68!important;font-weight:900}
+@media(max-width:460px){.anime-game-header h2{font-size:24px}.anime-game-map{gap:5px}.anime-stage{padding:8px 6px}.anime-stage b{font-size:11px}.anime-stage small{font-size:8px}.anime-options{gap:6px}.anime-options button{padding:13px 3px;font-size:15px}.anime-game-footer{gap:8px;font-size:8px}}
+@media(prefers-reduced-motion:reduce){.anime-emblem,.anime-stage{animation:none}}
+</style></head>
 <body>
 <header class="top"><b>ebnimaam · Rewards</b><span><a href="/store.html">Shop</a> · <a href="/account.html">Account</a></span></header>
 <main class="wrap">
@@ -18,7 +55,17 @@
    <section class="balance"><p>Available Ebnimaam balance</p><div id="balance" class="amount">₦0</div><p id="reserved" class="muted">₦0 reserved for bank refund requests</p><p>Use your Ebnimaam balance at checkout. Rewards cannot be transferred to another account or withdrawn as cash.</p></section>
    <section class="card"><h2>Referral rewards</h2><p>Invite five different people. You earn ₦200 when each person completes their first verified paid purchase, building to ₦1,000 after five successful referrals. Rewards are store credit for Ebnimaam checkout only.</p><div class="row"><span class="pill" id="referralProgress">0 / 5 paid referrals</span></div><div class="field"><label>Your referral code</label><input id="referralCode" readonly></div><div class="row"><button class="btn" id="copyReferral">Copy referral code</button><button class="btn alt" id="copyReferralLink">Copy invite link</button><button class="btn alt" id="shareReferral">Share invite</button></div><div id="rewardAmounts" class="muted"></div><form id="claimReferral"><div class="field"><label>Have a friend's referral code?</label><input id="claimCode" maxlength="30" placeholder="Enter code before your first paid order"></div><button class="btn alt">Apply referral code</button></form></section>
   </div>
-  <section class="card" id="dailyGame"><h2>Daily Pattern Challenge</h2><p class="muted" id="gameRewardText">Solve the number pattern to earn store-only credit. One reward per day; up to three attempts.</p><div id="gameStatus" class="notice" role="status">Ready when you are. Start a new challenge to reveal the sequence.</div><p id="gameSequence" style="font-size:21px;font-weight:700;letter-spacing:.08em;color:var(--navy)"></p><div id="gameOptions" class="row"></div><button class="btn" id="gameStart" type="button">Start challenge</button></section>
+  <section class="card anime-game" id="dailyGame">
+<div class="anime-game-header"><div><div class="anime-kicker">EBNIMAAM SHINOBI ACADEMY</div><h2>Shadow Trials</h2><p>Three escalating trials. Read the pattern, outthink the rival, claim your rank. Five attempts per day.</p></div><div class="anime-emblem">影</div></div>
+<div class="anime-game-map"><div class="anime-stage"><span>01</span><b>Genin</b><small>Academy Gatekeeper</small></div><div class="anime-stage"><span>02</span><b>Chunin</b><small>Three-Tail Strategist</small></div><div class="anime-stage"><span>03</span><b>Shadow Boss</b><small>Eclipse Master</small></div></div>
+<div class="anime-opponent"><div class="anime-avatar" id="gameOpponentAvatar">忍</div><div><b id="gameOpponent">The Academy Gatekeeper awaits.</b><small id="gameMission">Enter the academy and begin your first trial.</small></div></div>
+<div class="anime-game-status"><div class="anime-rank" id="gameRank">UNRANKED</div><div id="gameRewardText" class="muted">Solve the first pattern to earn store-only credit. Five attempts each day, one reward per day.</div></div>
+<div id="gameStatus" class="notice" role="status">Your mission is ready. Start the trial to reveal your first pattern.</div>
+<div class="anime-scroll"><p class="anime-sequence-label">THE NUMBER SEAL · FIND THE MISSING VALUE</p><p id="gameSequence" class="anime-sequence"></p></div>
+<div id="gameOptions" class="anime-options"></div>
+<div class="anime-game-footer"><span>⏳ 5-minute trial window</span><span>✦ Server-verified score</span><span>◈ Store-credit reward</span></div>
+<button class="btn anime-start" id="gameStart" type="button">Enter the trial</button>
+</section>
   <section class="card"><h2>Request a bank refund</h2><p class="muted">Only approved refund credits can be requested for a manual bank refund. Referral and game rewards remain in your Ebnimaam balance and can only be used at checkout.</p>
    <form id="bankRefund"><div class="grid"><div class="field"><label>Amount (₦)</label><input id="refundAmount" type="number" min="1" step="1" required></div><div class="field"><label>Bank name</label><input id="bankName" maxlength="80" required></div><div class="field"><label>Account name</label><input id="accountName" maxlength="100" required></div><div class="field"><label>10-digit account number</label><input id="accountNumber" inputmode="numeric" pattern="[0-9]{10}" maxlength="10" required></div></div><button class="btn">Request bank refund</button></form>
    <div id="withdrawals"></div>
@@ -86,20 +133,52 @@
  }
  $('copyReferralLink').addEventListener('click',async()=>{const code=$('referralCode').value;const url=location.origin+'/store.html?ref='+encodeURIComponent(code);try{await navigator.clipboard.writeText(url);message('Your Ebnimaam invite link has been copied.')}catch{message(url)}});
    let activeGame=null;
+  let activeStageName='';
   async function startDailyGame(){
-   const button=$('gameStart');button.disabled=true;$('gameOptions').innerHTML='';$('gameSequence').textContent='';
+   const button=$('gameStart');let finished=false;button.disabled=true;button.textContent='Loading mission…';$('gameOptions').innerHTML='';$('gameSequence').textContent='';
    try{
     const response=await fetch('/api/game',{credentials:'same-origin',cache:'no-store'}),data=await response.json().catch(()=>({}));
     if(!response.ok)throw new Error(data.error||'The daily challenge is unavailable.');
-    if(data.rewardedToday){$('gameRewardText').textContent='You have already earned today’s game reward. Come back tomorrow.';$('gameStatus').textContent='Daily reward received. Your credit is ready to use at checkout.';return}
-    activeGame=data;$('gameSequence').textContent=(data.sequence||[]).join('  ·  ')+'  ·  ?';
-    $('gameRewardText').textContent='Correct answer reward: '+money(data.rewardKobo)+' store credit. Attempts remaining today: '+Number(data.attemptsLeft||0)+'.';
-    $('gameStatus').textContent='Choose the next number in the sequence.';
-    $('gameOptions').innerHTML=(data.options||[]).map(value=>'<button class="btn alt" type="button" data-game-answer="'+Number(value)+'">'+Number(value)+'</button>').join('');
-   }catch(error){$('gameStatus').textContent=error.message||'Could not start the challenge.'}
-   finally{button.disabled=false}
+    if(data.completedAll){finished=true;$('gameRank').textContent='SHADOW MASTER';$('gameRewardText').textContent='All three trials have been cleared. Your daily reward status is settled.';$('gameStatus').textContent='The academy recognises you as a Shadow Master. Return tomorrow to begin again.';$('gameStart').textContent='Trials completed';$('gameStart').disabled=true;return}
+    activeGame=data;activeStageName=String(data.stageName||'Genin Trial');
+    $('gameRank').textContent=activeStageName.toUpperCase();
+    $('gameOpponent').textContent=String(data.opponent||'Your rival awaits.');
+    $('gameMission').textContent=String(data.mission||'Read the seal and find the missing number.');
+    $('gameOpponentAvatar').textContent=data.stage===3?'影':data.stage===2?'狐':'忍';
+    document.querySelectorAll('.anime-stage').forEach((node,index)=>node.classList.toggle('active',index===Number(data.stage||1)-1));
+    $('gameSequence').textContent=(data.sequence||[]).join('   ·   ')+'   ·   ?';
+    $('gameRewardText').textContent=(data.alreadyRewardedToday?'Daily reward already claimed. Complete the remaining trials for your Shadow Master rank.':'First correct answer reward: '+money(data.rewardKobo)+' store credit.')+' Attempts remaining after this trial: '+Number(data.attemptsLeft||0)+'.';
+    $('gameStatus').textContent='Mission accepted. Study the number seal carefully. One answer, no hints.';
+    $('gameOptions').innerHTML=(data.options||[]).map((value,index)=>'<button type="button" data-game-answer="'+Number(value)+'" aria-label="Option '+(index+1)+': '+Number(value)+'">'+Number(value)+'</button>').join('');
+    $('gameStart').textContent='Trial in progress';
+   }catch(error){$('gameStatus').textContent=error.message||'Could not start the challenge.';if(/attempts|come back tomorrow|trials are complete/i.test(String(error.message||''))){finished=true;button.disabled=true;button.textContent='Return tomorrow'}}
+   finally{if(finished){button.disabled=true}else if(!activeGame){button.disabled=false;button.textContent='Enter the trial'}else button.disabled=true}
   }
   $('gameStart').addEventListener('click',startDailyGame);
+  $('gameOptions').addEventListener('click',async event=>{
+   const button=event.target.closest('[data-game-answer]');if(!button||!activeGame)return;
+   $('gameOptions').querySelectorAll('button').forEach(item=>item.disabled=true);
+   try{
+    const response=await fetch('/api/game',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({attemptId:activeGame.attemptId,answer:Number(button.dataset.gameAnswer)})});
+    const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'The answer could not be checked.');
+    activeGame=null;$('gameSequence').textContent='';
+    if(data.correct){
+     $('gameRank').textContent=data.completedAll?'SHADOW MASTER':'TRIAL CLEARED';
+     $('gameStatus').textContent=data.rewardKobo>0?'Victory. '+activeStageName+' cleared. '+money(data.rewardKobo)+' has been added to your store-only Ebnimaam balance.':(data.alreadyRewarded?'Victory. '+activeStageName+' cleared. Your daily reward was already claimed.':'Victory. '+activeStageName+' cleared.');
+     $('gameStart').textContent=data.completedAll?'Trials completed':'Start next rank';
+     $('gameStart').disabled=data.completedAll||Number(data.attemptsLeft||0)<=0;
+     if(data.completedAll)$('gameStatus').textContent+=' You have completed all three ranks for today.';
+     else if(Number(data.attemptsLeft||0)<=0)$('gameStatus').textContent+=' Your daily attempts are finished; return tomorrow to continue.';
+    } else {
+     $('gameRank').textContent='TRIAL FAILED';
+     $('gameStatus').textContent='The seal was not solved. The correct answer was '+Number(data.answer)+'. Start another trial while today’s attempts remain.';
+     $('gameStart').textContent=Number(data.attemptsLeft||0)>0?'Retry this rank':'Daily attempts complete';
+     $('gameStart').disabled=Number(data.attemptsLeft||0)<=0;
+    }
+    $('gameOptions').innerHTML='';await load();
+   }catch(error){$('gameStatus').textContent=error.message||'Could not check your answer.';$('gameOptions').querySelectorAll('button').forEach(item=>item.disabled=false)}
+  });
+ 
   $('gameOptions').addEventListener('click',async event=>{
    const button=event.target.closest('[data-game-answer]');if(!button||!activeGame)return;
    $('gameOptions').querySelectorAll('button').forEach(item=>item.disabled=true);

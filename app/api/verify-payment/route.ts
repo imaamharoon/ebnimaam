@@ -3,6 +3,7 @@ import { checkRateLimit } from '../../../lib/rate-limit';
 import { verifyAndReconcilePaystack } from '../../../lib/paystack-reconciliation';
 import { getVerifiedCustomer } from '../../../lib/loyalty';
 import { Pool } from 'pg';
+import { notifyOrder } from '../../../lib/push-notifications';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,6 +41,10 @@ export async function POST(req: Request) {
     );
     if (!owned.rowCount) return NextResponse.json({ paid: false, error: 'That payment reference is not linked to your account.' }, { status: 404, headers: { 'cache-control': 'no-store' } });
     const result = await verifyAndReconcilePaystack(reference);
+    if (result.paid && !result.alreadyProcessed) {
+      const message = result.fulfilmentStatus === 'stock_issue' ? 'Payment received; the store is reviewing stock.' : 'Your Ebnimaam payment is confirmed and your order is being prepared.';
+      await notifyOrder(reference,'Ebnimaam · Payment confirmed',message).catch(()=>{});
+    }
     return NextResponse.json(result, { headers: { 'cache-control': 'no-store' } });
   } catch (error: any) {
     const message = String(error?.message || 'Payment verification is temporarily unavailable.');

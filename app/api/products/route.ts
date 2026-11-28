@@ -167,13 +167,5 @@ export async function POST(req: Request) {
 }
 export async function DELETE(req: Request) {
   if (!isAdminRequest(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  try {
-    const { id } = await req.json();
-    if (!id) return NextResponse.json({ error: 'Product ID is required.' }, { status: 400 });
-    await pool.query('UPDATE public.ebnimaam_products SET is_active=FALSE,updated_at=NOW() WHERE id=$1', [String(id)]);
-    await recordAdminActivity('product.archived', 'product', String(id));
-    return NextResponse.json({ ok: true, archived: true });
-  } catch {
-    return NextResponse.json({ error: 'Product archive failed.' }, { status: 500 });
-  }
+  return NextResponse.json({ error: 'Product deletion and archiving are disabled. Open Edit and unpublish the product to remove it from the storefront without losing its history.' }, { status: 405 });
 }

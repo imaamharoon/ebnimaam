@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
-import { isCurrentCustomerSession } from './customer-sessions';
+import { isCurrentCustomerSession, resolveCustomerSessionUser } from './customer-sessions';
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'crypto';
 
 const authBase = (process.env.NEON_AUTH_BASE_URL || 'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neon.tech/ebnimaam/auth').replace(/\/$/, '');
@@ -34,22 +34,25 @@ export function decryptBankDetails(value: unknown) {
 
 export async function getVerifiedCustomer(req: Request) {
   const cookie = req.headers.get('cookie') || '';
-  if (!cookie) return null;
-  try {
-    const response = await fetch(authBase + '/get-session', {
-      headers: { cookie, origin: new URL(req.url).origin },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!response.ok) return null;
-    const data = await response.json().catch(() => ({}));
-    const user = data?.user;
-    if (!user?.id || !user?.email || user.emailVerified !== true) return null;
-    if (!(await isCurrentCustomerSession(req, String(user.id)))) return null;
-    return { id: String(user.id), email: String(user.email), name: String(user.name || '') };
-  } catch {
-    return null;
+  if (cookie) {
+    try {
+      const response = await fetch(authBase + '/get-session', {
+        headers: { cookie, origin: new URL(req.url).origin },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(8000),
+      });
+      if (response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const user = data?.user;
+        if (user?.id && user?.email && user.emailVerified === true
+          && await isCurrentCustomerSession(req, String(user.id))) {
+          return { id: String(user.id), email: String(user.email), name: String(user.name || '') };
+        }
+      }
+    } catch { /* A verified local passkey session may still be available. */ }
   }
+  const local = await resolveCustomerSessionUser(req);
+  return local ? { ...local } : null;
 }
 
 export async function ensureLoyaltySchema(pool: Pool | PoolClient) {

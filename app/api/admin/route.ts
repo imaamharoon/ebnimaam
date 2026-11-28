@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { timingSafeEqual } from 'crypto';
+import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { Pool } from 'pg';
 import { createAdminSession, isAdminRequest, ADMIN_SESSION_MAX_AGE } from '../../../lib/admin-auth';
 import { checkRateLimit } from '../../../lib/rate-limit';
@@ -9,23 +9,51 @@ import { ensureOrderEmailEventsTable, isOrderEmailConfigured, sendOrderStatusEma
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const secret = process.env.ADMIN_PASSWORD || '';
+const sessionSecret = process.env.ADMIN_PASSWORD || process.env.AUTH_SECRET || '';
 
 function sameSecret(value: string, expected: string) {
   const a = Buffer.from(value);
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
 }
+async function ensureAdminCredentialSchema() {
+  await pool.query('CREATE TABLE IF NOT EXISTS public.ebnimaam_admin_credentials (id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id=1), password_hash TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
+}
+function hashAdminPassword(password: string) {
+  const salt = randomBytes(16).toString('hex');
+  return 'scrypt$' + salt + '$' + scryptSync(password, salt, 64).toString('hex');
+}
+function verifyAdminPasswordHash(password: string, stored: string) {
+  try {
+    const parts = stored.split('$');
+    const scheme = parts[0], salt = parts[1], hash = parts[2];
+    if (scheme !== 'scrypt' || !salt || !hash) return false;
+    const expected = Buffer.from(hash, 'hex');
+    const actual = scryptSync(password, salt, 64);
+    return expected.length === actual.length && timingSafeEqual(expected, actual);
+  } catch { return false; }
+}
+async function verifyAdminPassword(password: string, bootstrap = true) {
+  await ensureAdminCredentialSchema();
+  const stored = await pool.query('SELECT password_hash FROM public.ebnimaam_admin_credentials WHERE id=1');
+  if (stored.rowCount) return verifyAdminPasswordHash(password, String(stored.rows[0].password_hash));
+  if (!secret || !sameSecret(password, secret)) return false;
+  if (bootstrap) {
+    await pool.query('INSERT INTO public.ebnimaam_admin_credentials(id,password_hash) VALUES(1,$1) ON CONFLICT(id) DO NOTHING', [hashAdminPassword(secret)]);
+  }
+  return true;
+}
 export async function POST(req: Request) {
   try {
     if (!(await checkRateLimit(req, 'admin-signin', 8, 15 * 60))) return NextResponse.json({ error: 'Too many administrator sign-in attempts. Please wait 15 minutes.' }, { status: 429, headers: { 'retry-after': '900' } });
     const { password } = await req.json();
-    if (!secret) return NextResponse.json({ error: 'Admin password is not configured.' }, { status: 503 });
-    if (typeof password !== 'string' || !sameSecret(password, secret)) {
+    if (!secret || !sessionSecret) return NextResponse.json({ error: 'Administrator sign-in is not configured.' }, { status: 503 });
+    if (typeof password !== 'string' || password.length > 256 || !(await verifyAdminPassword(password))) {
       return NextResponse.json({ error: 'Incorrect password.' }, { status: 401 });
     }
     await recordAdminActivity('admin.login.success', 'admin_session', null, { method: 'password' });
     const response = NextResponse.json({ ok: true });
-    response.cookies.set('ebn_admin', createAdminSession(secret), {
+    response.cookies.set('ebn_admin', createAdminSession(sessionSecret), {
       httpOnly: true, secure: new URL(req.url).protocol === 'https:', sameSite: 'strict',
       path: '/', maxAge: ADMIN_SESSION_MAX_AGE,
     });
@@ -34,9 +62,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Request failed.' }, { status: 400 });
   }
 }
-
 export async function GET(req: Request) {
-  if (!isAdminRequest(req, secret)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!isAdminRequest(req, sessionSecret)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     await ensureOrderEmailEventsTable();
     await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS order_total_kobo BIGINT');
@@ -72,6 +99,30 @@ export async function GET(req: Request) {
 export async function PATCH(req: Request) {
   if (!isAdminRequest(req, secret)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const body = await req.json().catch(() => ({}));
+  if (body?.action === 'change_admin_password') {
+    const currentPassword = String(body?.currentPassword || '');
+    const newPassword = String(body?.newPassword || '');
+    if (!currentPassword || !(await verifyAdminPassword(currentPassword, false))) {
+      return NextResponse.json({ error: 'Your current administrator password is incorrect.' }, { status: 401 });
+    }
+    if (newPassword.length < 14 || newPassword.length > 256 || !/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+      return NextResponse.json({ error: 'Use at least 14 characters with uppercase, lowercase, a number and a symbol.' }, { status: 400 });
+    }
+    if (sameSecret(currentPassword, newPassword)) {
+      return NextResponse.json({ error: 'Choose a new password that is different from the current password.' }, { status: 400 });
+    }
+    await ensureAdminCredentialSchema();
+    await pool.query(
+      'INSERT INTO public.ebnimaam_admin_credentials(id,password_hash) VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET password_hash=EXCLUDED.password_hash,updated_at=NOW()',
+      [hashAdminPassword(newPassword)],
+    );
+    await recordAdminActivity('admin.password.changed', 'admin_security', null, { method: 'owner_password_change' });
+    const response = NextResponse.json({ ok: true, message: 'Administrator password updated. Sign in again with the new password.' });
+    response.cookies.set('ebn_admin', '', {
+      httpOnly: true, secure: new URL(req.url).protocol === 'https:', sameSite: 'strict', path: '/', maxAge: 0,
+    });
+    return response;
+  }
   const reference = String(body?.reference || '').trim();
   if (!reference || reference.length > 160) {
     return NextResponse.json({ error: 'A valid order reference is required.' }, { status: 400 });

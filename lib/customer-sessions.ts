@@ -40,9 +40,14 @@ async function ensureSessionTables() {
     session_hash TEXT NOT NULL,
     device_hash TEXT NOT NULL,
     device_label TEXT NOT NULL,
+    user_email TEXT NOT NULL DEFAULT '',
+    user_name TEXT NOT NULL DEFAULT '',
     started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  await pool.query("ALTER TABLE public.ebnimaam_customer_sessions ADD COLUMN IF NOT EXISTS user_email TEXT NOT NULL DEFAULT ''");
+  await pool.query("ALTER TABLE public.ebnimaam_customer_sessions ADD COLUMN IF NOT EXISTS user_name TEXT NOT NULL DEFAULT ''");
+  await pool.query('CREATE INDEX IF NOT EXISTS ebnimaam_customer_sessions_hash_idx ON public.ebnimaam_customer_sessions(session_hash,device_hash)');
   await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_customer_known_devices (
     user_id TEXT NOT NULL,
     device_hash TEXT NOT NULL,
@@ -110,7 +115,7 @@ async function sendNewDeviceEmail(email: string, label: string) {
 }
 
 /** One active Ebnimaam application session is allowed per customer account. */
-export async function activateCustomerSession(response: NextResponse, req: Request, user: { id: string; email: string }) {
+export async function activateCustomerSession(response: NextResponse, req: Request, user: { id: string; email: string; name?: string }) {
   await ensureSessionTables();
   let deviceId = cookieValue(req, DEVICE_COOKIE);
   if (!/^[A-Za-z0-9_-]{32,100}$/.test(deviceId)) deviceId = randomBytes(32).toString('base64url');
@@ -131,11 +136,12 @@ export async function activateCustomerSession(response: NextResponse, req: Reque
   await pool.query('DELETE FROM public.ebnimaam_customer_sessions WHERE device_hash=$1 AND user_id<>$2', [deviceHash, user.id]);
   const sessionToken = randomBytes(32).toString('base64url');
   await pool.query(
-    `INSERT INTO public.ebnimaam_customer_sessions(user_id,session_hash,device_hash,device_label,started_at,last_seen_at)
-     VALUES($1,$2,$3,$4,NOW(),NOW())
+    `INSERT INTO public.ebnimaam_customer_sessions(user_id,session_hash,device_hash,device_label,user_email,user_name,started_at,last_seen_at)
+     VALUES($1,$2,$3,$4,$5,$6,NOW(),NOW())
      ON CONFLICT(user_id) DO UPDATE SET session_hash=EXCLUDED.session_hash,device_hash=EXCLUDED.device_hash,
-       device_label=EXCLUDED.device_label,started_at=NOW(),last_seen_at=NOW()`,
-    [user.id, digest(sessionToken), deviceHash, label],
+       device_label=EXCLUDED.device_label,user_email=EXCLUDED.user_email,user_name=EXCLUDED.user_name,
+       started_at=NOW(),last_seen_at=NOW()`,
+    [user.id, digest(sessionToken), deviceHash, label, user.email, String(user.name || '')],
   );
   const secure = new URL(req.url).protocol === 'https:';
   response.cookies.set(SESSION_COOKIE, sessionToken, { httpOnly: true, secure, sameSite: 'lax', path: '/', maxAge: SESSION_MAX_AGE });
@@ -148,6 +154,21 @@ export async function activateCustomerSession(response: NextResponse, req: Reque
     const status = await sendNewDeviceEmail(user.email, label);
     await pool.query('UPDATE public.ebnimaam_customer_security_events SET notification_status=$2 WHERE id=$1', [event.rows[0].id, status]);
   }
+}
+
+export async function resolveCustomerSessionUser(req: Request): Promise<{id:string;email:string;name:string}|null> {
+  try {
+    const token = cookieValue(req, SESSION_COOKIE);
+    const deviceId = cookieValue(req, DEVICE_COOKIE);
+    if (!token || !deviceId) return null;
+    await ensureSessionTables();
+    const result = await pool.query(
+      'SELECT user_id,user_email,user_name FROM public.ebnimaam_customer_sessions WHERE session_hash=$1 AND device_hash=$2 LIMIT 1',
+      [digest(token), digest(deviceId)],
+    );
+    if (!result.rowCount || !String(result.rows[0].user_email || '').includes('@')) return null;
+    return { id: String(result.rows[0].user_id), email: String(result.rows[0].user_email), name: String(result.rows[0].user_name || '') };
+  } catch { return null; }
 }
 
 export async function hasCustomerSession(userId: string) {
