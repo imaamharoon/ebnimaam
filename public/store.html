@@ -258,7 +258,7 @@ body{background:var(--cream);color:var(--ink)}
 </style></head>
 <body>
 <div class="announcement">Delivery throughout Nigeria · Secure Paystack checkout</div>
-<header class="topbar"><nav class="nav"><a class="brand" href="#home"><img src="/assets/icon-192.png" alt="ebnimaam logo"><span class="brand-word">ebnimaam</span></a><div class="navlinks"><a href="#shop">SHOP</a><a href="#story">OUR STORY</a><a href="#news">NEWS</a><a href="#track">TRACK ORDER</a><a href="/rewards.html">REWARDS</a></div><div class="nav-actions"><button class="iconbtn" onclick="openAccountPanel()" aria-label="Your account" title="Your account" style="font-size:12px;font-weight:700">Account</button><button class="iconbtn" aria-label="Search" onclick="document.getElementById('search').focus()">⌕</button><button class="iconbtn" id="wishlistToggle" aria-label="Show saved products" title="Show saved products" onclick="toggleWishlistView()">♡<span class="cart-count" id="savedCount">0</span></button><button class="iconbtn" aria-label="Shopping bag" onclick="openCart()">♧<span class="cart-count" id="cartCount">0</span></button><button class="install-btn" id="installApp" type="button">Download app</button><button class="iconbtn mobile-menu" id="menuToggle" onclick="toggleMenu()" aria-label="Open navigation menu" aria-expanded="false">☰</button></div></nav></header><div id="pullRefreshHint" class="pull-refresh-hint" role="status" aria-live="polite">Pull down to refresh</div><div id="appDownloadStatus" class="app-download-status" role="status" aria-live="polite"></div><div class="brand-splash" id="brandSplash" aria-label="Welcome to Ebnimaam"><div class="brand-splash-card"><img src="/assets/icon-512.png" alt="Ebnimaam logo"><div class="brand-splash-name">ebnimaam</div><p>Everyday, elevated.</p><button type="button" onclick="openAccountPanel();dismissBrandSplash()">Create account</button><button type="button" class="brand-splash-secondary" onclick="dismissBrandSplash()">Explore the store</button></div></div>
+<header class="topbar"><nav class="nav"><a class="brand" href="#home"><img src="/assets/icon-192.png" alt="ebnimaam logo"><span class="brand-word">ebnimaam</span></a><div class="navlinks"><a href="#shop">SHOP</a><a href="#story">OUR STORY</a><a href="#news">NEWS</a><a href="#track">TRACK ORDER</a><a href="/rewards.html">REWARDS</a></div><div class="nav-actions"><button class="iconbtn" onclick="openAccountPanel()" aria-label="Your account" title="Your account" style="font-size:12px;font-weight:700">Account</button><button class="iconbtn" aria-label="Search" onclick="document.getElementById('search').focus()">⌕</button><button class="iconbtn" id="wishlistToggle" aria-label="Show saved products" title="Show saved products" onclick="toggleWishlistView()">♡<span class="cart-count" id="savedCount">0</span></button><button class="iconbtn" aria-label="Shopping bag" onclick="openCart()">♧<span class="cart-count" id="cartCount">0</span></button><button class="install-btn" id="installApp" type="button">Download app</button><button class="iconbtn mobile-menu" id="menuToggle" onclick="toggleMenu()" aria-label="Open navigation menu" aria-expanded="false">☰</button></div></nav></header><div id="pullRefreshHint" class="pull-refresh-hint" role="status" aria-live="polite">Pull down to refresh</div><div id="appDownloadStatus" class="app-download-status" role="status" aria-live="polite"></div><div class="brand-splash" id="brandSplash" aria-label="Welcome to Ebnimaam"><div class="brand-splash-card"><img src="/assets/icon-512.png" alt="Ebnimaam logo"><div class="brand-splash-name">ebnimaam</div><p>Everyday, elevated.</p><button type="button" onclick="openAccountPanel();dismissBrandSplash(true)">Create account</button><button type="button" class="brand-splash-secondary" onclick="dismissBrandSplash(true)">Explore the store</button></div></div>
 <main id="home"><section class="hero"><div class="hero-panel"><div class="hero-copy"><div class="eyebrow">PREMIUM QUALITY · GREAT PRICES</div><h1>Shop Smart,<br>Live Better.</h1><p>Thoughtfully chosen fashion, essentials and everyday finds for life in Nigeria.</p><a class="btn" href="#shop">Shop now <span>→</span></a></div></div></section>
 <div class="reference-search"><div class="search-assist" role="search"><div class="search-assist-input"><span class="search-glass" aria-hidden="true">⌕</span><input id="search" placeholder="Search products, styles and essentials…" aria-label="Search products"><button class="search-action" type="button" id="voiceSearchButton" aria-label="Search by voice" title="Search by voice">🎙</button><button class="search-action" type="button" id="photoSearchButton" aria-label="Search with a photo" title="Search with a photo">▧</button></div><input id="imageSearchInput" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden></div></div>
 <nav class="category-strip" id="category-strip" aria-label="Shop categories">
@@ -303,11 +303,24 @@ body{background:var(--cream);color:var(--ink)}
 </div><label class="checkbox"><input type="checkbox" name="agreed" required><span>I confirm my details are correct and agree to the <a href="/terms.html" target="_blank" style="color:#9a6b34">checkout and delivery terms</a>.</span></label><p class="form-note">You will be redirected to Paystack to complete payment securely. Your order is confirmed only after payment verification.</p><button class="btn wide" id="payButton" type="submit">Continue to Paystack ↗</button></form></aside></div>
 <script>
 
-function dismissBrandSplash(){
+let skipBrandAutoSignup=false;
+function dismissBrandSplash(skipAutoSignup=false){
+ if(skipAutoSignup)skipBrandAutoSignup=true;
  const splash=document.getElementById('brandSplash');
- if(splash){splash.classList.add('dismissed');try{sessionStorage.setItem('ebnimaam_intro_seen','1')}catch{}}
+ if(splash){splash.classList.add('dismissed');try{localStorage.setItem('ebnimaam_intro_seen','1')}catch{}}
 }
-try{if(sessionStorage.getItem('ebnimaam_intro_seen')==='1')document.getElementById('brandSplash')?.classList.add('dismissed')}catch{}
+try{
+ if(localStorage.getItem('ebnimaam_intro_seen')==='1'){
+  document.getElementById('brandSplash')?.classList.add('dismissed');
+ }else{
+  window.setTimeout(()=>{
+   if(!skipBrandAutoSignup){
+    openAccountPanel();
+    dismissBrandSplash();
+   }
+  },1250);
+ }
+}catch{}
 document.querySelectorAll('[data-home-category]').forEach(button=>button.addEventListener('click',()=>{
  const category=button.dataset.homeCategory||'All';
  activeFilter=category==='More'?'All':category;
