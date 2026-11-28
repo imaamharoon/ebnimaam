@@ -49,7 +49,7 @@ export async function GET(req: Request) {
   try {
     await ensureOrderEmailEventsTable();
     await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS order_total_kobo BIGINT');
-      const [result, customerResult, activity] = await Promise.all([
+      const [result, customerResult, activity, rewardsResult] = await Promise.all([
       pool.query(
         `SELECT o.reference,o.auth_user_id,o.customer_email,o.customer_name,o.customer_phone,o.address,
                 COALESCE(o.order_total_kobo,o.amount_kobo) AS amount_kobo,o.amount_kobo AS paystack_amount_kobo,o.currency,o.status,o.fulfilment_status,o.items,o.created_at,o.paid_at,
@@ -71,8 +71,9 @@ export async function GET(req: Request) {
          GROUP BY LOWER(customer_email) ORDER BY last_order_at DESC LIMIT 500`,
       ),
       getRecentAdminActivity(40),
+      pool.query("SELECT COALESCE(SUM(amount_kobo),0)::bigint AS rewards_paid_kobo FROM public.ebnimaam_wallet_ledger WHERE direction='credit' AND entry_type IN ('referral_reward','game_reward','referral_welcome')").catch(()=>({rows:[{rewards_paid_kobo:0}]})),
     ]);
-    return NextResponse.json({ orders: result.rows, customers: customerResult.rows, activity, email_configured: isOrderEmailConfigured() }, { headers: { 'cache-control': 'no-store' } });
+    return NextResponse.json({ orders: result.rows, customers: customerResult.rows, activity, rewards_paid_kobo: rewardsResult.rows[0]?.rewards_paid_kobo || 0, email_configured: isOrderEmailConfigured() }, { headers: { 'cache-control': 'no-store' } });
   } catch {
     return NextResponse.json({ error: 'Orders unavailable.' }, { status: 503 });
   }
