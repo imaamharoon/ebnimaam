@@ -37,4 +37,4 @@
 <div class="footer"><a href="/privacy.html">Privacy policy</a> · <a href="/returns.html">Returns & refunds</a> · <a href="/store.html">Storefront</a></div>
 </main><script>
 fetch('/api/store-settings',{cache:'no-store'}).then(r=>r.json()).then(data=>{const fees=data.settings&&data.settings.deliveryFeesByState;if(!fees)return;const list=document.getElementById('deliveryFeeSchedule');list.textContent='';const labels={'FCT - Abuja':'FCT (Abuja)','default':'All other Nigerian states'};Object.entries(fees).filter(([state])=>state!=='default').forEach(([state,amount])=>{const li=document.createElement('li');li.textContent=(labels[state]||state)+': ₦'+Number(amount).toLocaleString('en-NG');list.appendChild(li)});if(fees.default!==undefined){const li=document.createElement('li');li.textContent='All other Nigerian states: ₦'+Number(fees.default).toLocaleString('en-NG');list.appendChild(li)}}).catch(()=>{});
-</script></body></html>
+</script><script src="/assets/ebnimaam-theme.js" defer></script></body></html>
