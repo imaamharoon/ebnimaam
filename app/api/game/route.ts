@@ -76,7 +76,7 @@ function makePuzzle(type='pattern-vault') {
       display:'Complete the final square.',grid,
       clues:['Across: first step '+horizontal+', then +'+(horizontal+horizontalGrowth)+'.','Down: first step '+vertical+', then +'+(vertical+verticalGrowth)+'.'],
       explanation:'The missing value is '+answer+'. Both horizontal and vertical increments grow on the second step.'
-    },answer,[answer,answer+horizontalGrowth+2,answer-vertical,answer+verticalGrowth+horizontal]);
+    },answer,[answer,answer+101,Math.max(1,answer-102),answer+211]);
   }
   if(type==='cipher-breaker'){
     const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ',start=randomInt(0,26),jumps=[3,5,7,9,11];
