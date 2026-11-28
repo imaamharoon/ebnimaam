@@ -26,6 +26,7 @@ async function ensureGameSchema() {
         result TEXT CHECK(result IN ('won','miss','expired'))
       )
     `).then(async () => {
+      await pool.query('ALTER TABLE public.ebnimaam_game_attempts ADD COLUMN IF NOT EXISTS stage SMALLINT NOT NULL DEFAULT 1');
       await pool.query('CREATE INDEX IF NOT EXISTS ebnimaam_game_user_day_idx ON public.ebnimaam_game_attempts(user_id,created_at DESC)');
     }).then(() => undefined).catch((error) => {
       gameSchemaReady = null;
@@ -35,29 +36,87 @@ async function ensureGameSchema() {
   await gameSchemaReady;
 }
 
-function makePuzzle() {
-  const start = randomInt(2, 12);
-  const firstGap = randomInt(3, 9);
-  const gapGrowth = randomInt(2, 5);
+function makePuzzle(stage: number) {
+  const start = randomInt(7, 24);
   const sequence = [start];
-  let gap = firstGap;
-  for (let index = 0; index < 5; index += 1) {
-    sequence.push(sequence[sequence.length - 1] + gap);
-    gap += gapGrowth;
+  let answer = 0;
+  let distractors: number[] = [];
+
+  if (stage === 1) {
+    // Genin: two interleaved arithmetic progressions of gaps.
+    const gapA = randomInt(4, 10);
+    const gapB = randomInt(9, 16);
+    const growthA = randomInt(3, 6);
+    const growthB = randomInt(2, 5);
+    for (let step = 0; step < 8; step += 1) {
+      const pair = Math.floor(step / 2);
+      const gap = step % 2 === 0 ? gapA + growthA * pair : gapB + growthB * pair;
+      sequence.push(sequence[sequence.length - 1] + gap);
+    }
+    const nextGap = gapA + growthA * 4;
+    answer = sequence[sequence.length - 1] + nextGap;
+    distractors = [
+      sequence[sequence.length - 1] + gapB + growthB * 4,
+      answer - growthA,
+      answer + growthB,
+      answer + growthA + growthB,
+    ];
+  } else if (stage === 2) {
+    // Chunin: three interleaved arithmetic progressions of gaps.
+    const starts = [randomInt(3, 8),randomInt(8, 14),randomInt(14, 21)];
+    const growths = [randomInt(3, 6),randomInt(2, 5),randomInt(4, 7)];
+    for (let step = 0; step < 9; step += 1) {
+      const lane = step % 3;
+      const cycle = Math.floor(step / 3);
+      const gap = starts[lane] + growths[lane] * cycle;
+      sequence.push(sequence[sequence.length - 1] + gap);
+    }
+    const nextGap = starts[0] + growths[0] * 3;
+    answer = sequence[sequence.length - 1] + nextGap;
+    distractors = [
+      sequence[sequence.length - 1] + starts[1] + growths[1] * 3,
+      sequence[sequence.length - 1] + starts[2] + growths[2] * 3,
+      answer - growths[0],
+      answer + growths[1] + growths[2],
+    ];
+  } else {
+    // Shadow Boss: Fibonacci-style recurrence with a growing alternating offset.
+    const offsetBase = randomInt(2, 6);
+    const growth = randomInt(2, 4);
+    const evenOffset = randomInt(1, 4);
+    const oddOffset = randomInt(4, 8);
+    sequence.push(start + randomInt(5, 13));
+    const offsetFor = (termIndex:number) => offsetBase + Math.floor((termIndex - 2) / 2) * growth + (termIndex % 2 === 0 ? evenOffset : oddOffset);
+    for (let termIndex = 2; termIndex <= 8; termIndex += 1) {
+      sequence.push(sequence[termIndex - 1] + sequence[termIndex - 2] + offsetFor(termIndex));
+    }
+    const nextOffset = offsetFor(9);
+    answer = sequence[8] + sequence[7] + nextOffset;
+    distractors = [
+      sequence[8] + sequence[7] + offsetFor(8),
+      sequence[8] + sequence[6] + nextOffset,
+      sequence[8] * 2 + nextOffset,
+      answer + growth,
+    ];
   }
-  const answer = sequence[sequence.length - 1] + gap;
+
   const choices = new Set<number>([answer]);
-  const offsets = [gapGrowth, gapGrowth * 2, firstGap + gapGrowth, firstGap * 2];
+  for (const option of distractors) if (Number.isSafeInteger(option) && option > 0 && option !== answer) choices.add(option);
   while (choices.size < 4) {
-    const offset = offsets[randomInt(0, offsets.length)];
-    choices.add(Math.max(1, answer + (randomInt(0, 2) ? offset : -offset)));
+    const candidate = answer + (randomInt(0, 2) ? 1 : -1) * randomInt(3, 26);
+    if (candidate > 0 && candidate !== answer) choices.add(candidate);
   }
-  const options = Array.from(choices);
+  const options = Array.from(choices).slice(0,4);
   for (let index = options.length - 1; index > 0; index -= 1) {
     const swap = randomInt(0, index + 1);
     [options[index], options[swap]] = [options[swap], options[index]];
   }
-  return { sequence, options, answer };
+  const meta = stage === 1
+    ? { stageName:'Genin Trial', opponent:'The Academy Gatekeeper', mission:'Read both alternating growth patterns and predict the next seal.' }
+    : stage === 2
+      ? { stageName:'Chunin Trial', opponent:'The Three-Tail Strategist', mission:'Track three separate gap progressions across the sequence.' }
+      : { stageName:'Shadow Boss', opponent:'The Eclipse Master', mission:'Unravel the growing recurrence. Every term carries information from the previous two.' };
+  return { sequence, options, answer, stage, ...meta };
 }
 
 async function getRewardStatus(userId: string) {
@@ -91,16 +150,21 @@ export async function GET(req: Request) {
     if (status.attempts >= MAX_ATTEMPTS_PER_DAY) {
       return NextResponse.json({ error: 'You have used all three attempts for today. Come back tomorrow.', attemptsLeft: 0 }, { status: 429 });
     }
-    const puzzle = makePuzzle();
+    const stage = Math.min(MAX_ATTEMPTS_PER_DAY,status.attempts+1);
+    const puzzle = makePuzzle(stage);
     const attemptId = randomUUID();
     await pool.query(
-      `INSERT INTO public.ebnimaam_game_attempts(id,user_id,sequence,options,answer,expires_at)
-       VALUES($1,$2,$3::jsonb,$4::jsonb,$5,NOW()+INTERVAL '5 minutes')`,
-      [attemptId, user.id, JSON.stringify(puzzle.sequence), JSON.stringify(puzzle.options), puzzle.answer],
+      `INSERT INTO public.ebnimaam_game_attempts(id,user_id,sequence,options,answer,expires_at,stage)
+       VALUES($1,$2,$3::jsonb,$4::jsonb,$5,NOW()+INTERVAL '5 minutes',$6)`,
+      [attemptId, user.id, JSON.stringify(puzzle.sequence), JSON.stringify(puzzle.options), puzzle.answer, stage],
     );
     return NextResponse.json({
       attemptId,
       sequence: puzzle.sequence,
+      stage: puzzle.stage,
+      stageName: puzzle.stageName,
+      opponent: puzzle.opponent,
+      mission: puzzle.mission,
       options: puzzle.options,
       rewardKobo: status.rewardKobo,
       attemptsLeft: MAX_ATTEMPTS_PER_DAY - status.attempts - 1,
@@ -129,7 +193,7 @@ export async function POST(req: Request) {
   try {
     await client.query('BEGIN');
     const found = await client.query(
-      'SELECT id,options,answer,expires_at,completed_at FROM public.ebnimaam_game_attempts WHERE id=$1 AND user_id=$2 FOR UPDATE',
+      'SELECT id,options,answer,expires_at,completed_at,stage FROM public.ebnimaam_game_attempts WHERE id=$1 AND user_id=$2 FOR UPDATE',
       [attemptId, user.id],
     );
     if (!found.rowCount) throw new Error('This challenge was not found. Start a new one.');
@@ -177,6 +241,7 @@ export async function POST(req: Request) {
     await client.query('COMMIT');
     return NextResponse.json({
       correct,
+      stage: Number(attempt.stage||1),
       answer: Number(attempt.answer),
       rewardKobo,
       alreadyRewarded,
