@@ -135,11 +135,11 @@
    let activeGame=null;
   let activeStageName='';
   async function startDailyGame(){
-   const button=$('gameStart');button.disabled=true;button.textContent='Loading mission…';$('gameOptions').innerHTML='';$('gameSequence').textContent='';
+   const button=$('gameStart');let finished=false;button.disabled=true;button.textContent='Loading mission…';$('gameOptions').innerHTML='';$('gameSequence').textContent='';
    try{
     const response=await fetch('/api/game',{credentials:'same-origin',cache:'no-store'}),data=await response.json().catch(()=>({}));
     if(!response.ok)throw new Error(data.error||'The daily challenge is unavailable.');
-    if(data.completedAll){$('gameRank').textContent='SHADOW MASTER';$('gameRewardText').textContent='All three trials have been cleared. Your daily reward status is settled.';$('gameStatus').textContent='The academy recognises you as a Shadow Master. Return tomorrow to begin again.';$('gameStart').textContent='Trials completed';$('gameStart').disabled=true;return}
+    if(data.completedAll){finished=true;$('gameRank').textContent='SHADOW MASTER';$('gameRewardText').textContent='All three trials have been cleared. Your daily reward status is settled.';$('gameStatus').textContent='The academy recognises you as a Shadow Master. Return tomorrow to begin again.';$('gameStart').textContent='Trials completed';$('gameStart').disabled=true;return}
     activeGame=data;activeStageName=String(data.stageName||'Genin Trial');
     $('gameRank').textContent=activeStageName.toUpperCase();
     $('gameOpponent').textContent=String(data.opponent||'Your rival awaits.');
@@ -151,8 +151,8 @@
     $('gameStatus').textContent='Mission accepted. Study the number seal carefully. One answer, no hints.';
     $('gameOptions').innerHTML=(data.options||[]).map((value,index)=>'<button type="button" data-game-answer="'+Number(value)+'" aria-label="Option '+(index+1)+': '+Number(value)+'">'+Number(value)+'</button>').join('');
     $('gameStart').textContent='Trial in progress';
-   }catch(error){$('gameStatus').textContent=error.message||'Could not start the challenge.'}
-   finally{if(!activeGame){button.disabled=false;button.textContent='Enter the trial'}else button.disabled=true}
+   }catch(error){$('gameStatus').textContent=error.message||'Could not start the challenge.';if(/attempts|come back tomorrow|trials are complete/i.test(String(error.message||''))){finished=true;button.disabled=true;button.textContent='Return tomorrow'}}
+   finally{if(finished){button.disabled=true}else if(!activeGame){button.disabled=false;button.textContent='Enter the trial'}else button.disabled=true}
   }
   $('gameStart').addEventListener('click',startDailyGame);
   $('gameOptions').addEventListener('click',async event=>{
