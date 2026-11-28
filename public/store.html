@@ -131,23 +131,127 @@ body{background:var(--cream);color:var(--ink)}
 }
 @media(prefers-reduced-motion:reduce){.product,.product-img img{transition:none}}
 </style>  <link rel="stylesheet" href="/assets/marketplace-experience.css">
+<style id="reference-layout-match">
+/* Reference-matched Ebnimaam storefront */
+.hero-tools{position:relative;z-index:5;max-width:1340px;margin:-24px auto 0;padding:0 28px}
+.search-assist{width:min(620px,100%);margin:0 auto 15px;padding:6px 9px;border:1px solid #d8c49f;border-radius:999px;background:#fffefa;box-shadow:0 10px 28px #071a3116}
+.quick-categories{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;max-width:760px;margin:0 auto 8px}
+.quick-categories button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-width:0;border:0;background:transparent;color:#102544;padding:8px 4px;font-size:11px;font-weight:700}
+.category-icon{display:grid;place-items:center;width:60px;height:60px;border-radius:50%;background:#f2ece2;color:#102544;font-size:28px;box-shadow:inset 0 0 0 1px #e9dfcf}
+.best-seller-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.best-seller-title h2{margin:0}
+.best-seller-title a{color:#0b2340;font-size:11px;font-weight:800;text-decoration:none;white-space:nowrap}
+.referral-promo{max-width:1284px;margin:8px auto 40px;padding:22px 26px;display:flex;align-items:center;gap:20px;border:1px solid #d5a249;border-radius:18px;background:radial-gradient(circle at 85% 12%,#24476d 0,transparent 34%),linear-gradient(120deg,#06172d,#102b4b);color:#fff;box-shadow:0 16px 38px #071a3119}
+.referral-gift{display:grid;place-items:center;flex:0 0 74px;width:74px;height:74px;border-radius:18px;background:#ffffff0d;font-size:42px}
+.referral-copy{flex:1;min-width:0}
+.referral-copy .eyebrow{color:#e8bd70}
+.referral-copy h2{color:#fff;margin:5px 0;font-size:25px}
+.referral-copy p{font-size:12px;line-height:1.6;color:#e2e7ee;margin:0}
+.referral-cta{flex:0 0 auto;display:inline-flex;align-items:center;gap:9px;border-radius:999px;border:1px solid #e2b85f;background:linear-gradient(120deg,#f4ce79,#c68e3a);color:#102544;padding:12px 17px;text-decoration:none;font-size:10px;font-weight:800}
+.mobile-tabbar{display:none}
+@media(max-width:760px){
+  body{width:100%;max-width:100%;overflow-x:hidden;padding-bottom:78px;background:#faf8f2}
+  .announcement{display:none}
+  .topbar{position:sticky;top:0;background:#071a31;border-bottom:1px solid #c99550;box-shadow:0 4px 16px #071a3120}
+  .nav{position:relative;height:62px;max-width:none;padding:0 12px;justify-content:center;gap:0}
+  .brand{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);gap:0;color:#f2c56e}
+  .brand img{display:none}
+  .brand-word{font-size:24px;color:#f2c56e;letter-spacing:-.045em}
+  .navlinks{display:none}
+  .nav-actions{position:static;display:block}
+  .nav-actions .iconbtn[aria-label="Your account"],
+  .nav-actions .iconbtn[aria-label="Search"],
+  #wishlistToggle,
+  #installApp{display:none!important}
+  .nav-actions .iconbtn[aria-label="Shopping bag"]{position:absolute;right:12px;top:50%;transform:translateY(-50%);display:grid;place-items:center;color:#f5d28b;font-size:22px;padding:7px}
+  .mobile-menu{display:block!important;position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#f5d28b!important;font-size:22px!important;padding:7px!important}
+  .hero{max-width:none;margin:10px 10px 0;padding:0}
+  .hero-panel{position:relative;min-height:0;height:248px;border:1px solid #c99550;border-radius:16px;overflow:hidden;background-image:linear-gradient(90deg,#071a3110 0%,#071a3150 39%,#071a31f4 100%),url('https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1200&q=85');background-size:cover;background-position:25% center;box-shadow:0 14px 28px #071a311f}
+  .hero-copy{width:53%;max-width:none;margin-left:auto;padding:15px 13px 15px 0;color:white}
+  .hero-copy .eyebrow{display:none}
+  .hero h1{font:600 clamp(25px,7vw,31px)/1.06 'Playfair Display',serif;letter-spacing:-.04em;margin:0 0 9px;color:#fff}
+  .hero p{font-size:10px;line-height:1.48;color:#f0f2f5;margin:0;max-width:190px}
+  .hero .btn{margin-top:12px;padding:9px 13px;border-radius:999px;background:linear-gradient(120deg,#f4d184,#c78d37);border-color:#e5b75e;color:#102544;font-size:9px;letter-spacing:.04em;box-shadow:0 4px 12px #0003}
+  .hero .btn span{font-size:13px}
+  .hero-tools{max-width:none;margin:-21px 8px 0;padding:0;position:relative;z-index:6}
+  .search-assist{width:100%;padding:4px 7px;margin:0 auto 10px;border:1px solid #e5dfd4;border-radius:999px;background:#fff;box-shadow:0 8px 20px #071a311b}
+  .search-assist-input{min-height:42px;gap:2px}
+  .search-glass{font-size:20px;padding:0 5px 0 7px}
+  .search-assist-input input{font-size:12px;padding:8px 4px!important}
+  .search-action{width:34px;height:34px;flex-basis:34px;background:#f3eee6;font-size:16px}
+  .quick-categories{grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;margin:0 0 6px}
+  .quick-categories button{gap:5px;padding:5px 1px;font-size:9px;font-weight:600;line-height:1.15}
+  .category-icon{width:52px;height:52px;font-size:25px;background:#f2ece2;box-shadow:none}
+  .benefits{display:none}
+  .section#shop{max-width:none;padding:12px 12px 18px;margin:0}
+  #shop .section-head{text-align:left;margin:0 0 12px}
+  #shop .section-head .eyebrow,#shop .section-head p{display:none}
+  #shop .section-head h2{font:700 20px/1.2 'DM Sans',sans-serif;color:#0b2340;margin:0}
+  .best-seller-title h2{font:700 20px/1.2 'DM Sans',sans-serif}
+  .best-seller-title a{font-size:10px}
+  #shop .filters,#shop .compare-toolbar{display:none}
+  .products{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .product{min-width:0;border:1px solid #e9e3d9;border-radius:15px;background:#fff;overflow:hidden;box-shadow:0 6px 18px #071a310d}
+  .product-img{aspect-ratio:1/1.03;background:#f1eee8}
+  .product-img img{object-fit:cover}
+  .tag{top:8px;left:8px;padding:5px 8px;border-radius:999px;background:#f1c46d;color:#10213a;font-size:8px;font-weight:800}
+  .quick-add{display:none!important}
+  .product-info{padding:9px 10px 11px}
+  .product-category{font-size:8px}
+  .product-name{font:600 13px/1.28 'DM Sans',sans-serif;color:#13223b;margin:5px 0 8px}
+  .product-bottom{align-items:center;gap:7px;flex-wrap:wrap}
+  .price{font-size:12px;font-weight:800;color:#0b2340}
+  .small-add{border:0;border-radius:999px;background:#0b2340;color:#fff;padding:8px 10px;font-size:9px;font-weight:800}
+  .referral-promo{margin:4px 12px 18px;padding:13px 12px;display:grid;grid-template-columns:50px minmax(0,1fr);gap:10px;border-radius:15px}
+  .referral-gift{width:48px;height:48px;flex-basis:48px;border-radius:13px;font-size:30px}
+  .referral-copy .eyebrow{font-size:8px;letter-spacing:.14em}
+  .referral-copy h2{font-size:17px;margin:3px 0}
+  .referral-copy p{font-size:9px;line-height:1.4}
+  .referral-cta{grid-column:1/-1;justify-self:start;margin-left:59px;padding:8px 12px;font-size:9px}
+  .section.recent-section{padding:30px 12px}
+  .story{grid-template-columns:1fr;min-height:0}
+  .story-img{min-height:220px}
+  .story-copy{padding:30px 22px}
+  .section#news,.section#track{padding:42px 14px}
+  .newsletter{padding:38px 16px}
+  .footer{padding:35px 18px 25px}
+  .footer-inner{grid-template-columns:1fr 1fr;gap:20px}
+  .footer-bottom{gap:12px;flex-wrap:wrap}
+  .mobile-tabbar{position:fixed;left:0;right:0;bottom:0;z-index:60;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:center;min-height:66px;padding:7px 5px calc(7px + env(safe-area-inset-bottom));border-top:1px solid #e5e0d8;background:#fffefa;box-shadow:0 -6px 22px #071a310d}
+  .mobile-tabbar a,.mobile-tabbar button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:0;margin:0;padding:2px 0;border:0;background:transparent;color:#6d7580;text-decoration:none;font-size:19px;line-height:1.1}
+  .mobile-tabbar a:first-child{color:#0b2340}
+  .mobile-tabbar small{font-size:9px;line-height:1.2;color:inherit}
+  .mobile-tabbar button{font-size:19px}
+  .account-overlay{z-index:90}
+  .overlay{z-index:95}
+}
+@media(max-width:380px){
+  .hero-panel{height:230px}
+  .hero-copy{width:55%;padding-right:10px}
+  .hero h1{font-size:24px}
+  .hero p{font-size:9px}
+  .category-icon{width:46px;height:46px}
+  .product-name{font-size:12px}
+}
+@media(prefers-reduced-motion:reduce){.product,.product-img img,.search-action{transition:none}}
+</style>
 </head>
 <body>
 <div class="announcement">Delivery throughout Nigeria · Secure Paystack checkout</div>
 <header class="topbar"><nav class="nav"><a class="brand" href="#home"><img src="/assets/icon-192.png" alt="ebnimaam logo"><span class="brand-word">ebnimaam</span></a><div class="navlinks"><a href="#shop">SHOP</a><a href="#story">OUR STORY</a><a href="#news">NEWS</a><a href="#track">TRACK ORDER</a><a href="/rewards.html">REWARDS</a></div><div class="nav-actions"><button class="iconbtn" onclick="openAccountPanel()" aria-label="Your account" title="Your account" style="font-size:12px;font-weight:700">Account</button><button class="iconbtn" aria-label="Search" onclick="document.getElementById('search').focus()">⌕</button><button class="iconbtn" id="wishlistToggle" aria-label="Show saved products" title="Show saved products" onclick="toggleWishlistView()">♡<span class="cart-count" id="savedCount">0</span></button><button class="iconbtn" aria-label="Shopping bag" onclick="openCart()">♧<span class="cart-count" id="cartCount">0</span></button><button class="install-btn" id="installApp" type="button">Download app</button><button class="iconbtn mobile-menu" id="menuToggle" onclick="toggleMenu()" aria-label="Open navigation menu" aria-expanded="false">☰</button></div></nav></header><div id="pullRefreshHint" class="pull-refresh-hint" role="status" aria-live="polite">Pull down to refresh</div><div id="appDownloadStatus" class="app-download-status" role="status" aria-live="polite"></div>
 <main id="home"><section class="hero"><div class="hero-panel"><div class="hero-copy"><div class="eyebrow">Ebnimaam · Your everyday marketplace</div><h1>Shop Smart,<br>Live Better.</h1><p>Premium quality, great prices. Discover fashion, everyday essentials and thoughtful finds, selected for modern Nigerian living.</p><a class="btn" href="#shop">Shop Now <span>→</span></a></div></div></section>
 <div class="hero-tools">
-<div class="search-assist" role="search"><div class="search-assist-input"><span class="search-glass" aria-hidden="true">⌕</span><input id="search" placeholder="Search products, styles and essentials…" aria-label="Search products"><button class="search-action" type="button" id="voiceSearchButton" aria-label="Search by voice" title="Search by voice">🎙</button><button class="search-action" type="button" id="photoSearchButton" aria-label="Search with a photo" title="Search with a photo">▧</button></div><input id="imageSearchInput" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden></div><p id="searchAssistStatus" role="status" style="text-align:center;color:#78818b;font-size:11px;min-height:18px"></p>
+<div class="search-assist" role="search"><div class="search-assist-input"><span class="search-glass" aria-hidden="true">⌕</span><input id="search" placeholder="Search products…" aria-label="Search products"><button class="search-action" type="button" id="voiceSearchButton" aria-label="Search by voice" title="Search by voice">🎙</button><button class="search-action" type="button" id="photoSearchButton" aria-label="Search with a photo" title="Search with a photo">▧</button></div><input id="imageSearchInput" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden></div><p id="searchAssistStatus" role="status" style="text-align:center;color:#78818b;font-size:11px;min-height:18px"></p>
 <nav class="quick-categories" id="categoryQuick" aria-label="Shop by category">
-  <button type="button" onclick="browseCategory('Fashion','','Apparel')"><span class="category-icon">✦</span><span>Fashion</span></button>
-  <button type="button" onclick="browseCategory('Electronics','electronics','All')"><span class="category-icon">◉</span><span>Electronics</span></button>
-  <button type="button" onclick="browseCategory('Home & Living','home living','All')"><span class="category-icon">⌂</span><span>Home & Living</span></button>
-  <button type="button" onclick="browseCategory('Beauty','beauty','All')"><span class="category-icon">❀</span><span>Beauty</span></button>
-  <button type="button" onclick="browseCategory('More','','All')"><span class="category-icon">＋</span><span>More</span></button>
+  <button type="button" onclick="browseCategory('Fashion','','Apparel')"><span class="category-icon" aria-hidden="true">👗</span><span>Fashion</span></button>
+  <button type="button" onclick="browseCategory('Electronics','electronics','All')"><span class="category-icon" aria-hidden="true">📱</span><span>Electronics</span></button>
+  <button type="button" onclick="browseCategory('Home & Living','home living','All')"><span class="category-icon" aria-hidden="true">🏠</span><span>Home & Living</span></button>
+  <button type="button" onclick="browseCategory('Beauty','beauty','All')"><span class="category-icon" aria-hidden="true">🧴</span><span>Beauty</span></button>
+  <button type="button" onclick="browseCategory('More','','All')"><span class="category-icon" aria-hidden="true">▦</span><span>More</span></button>
 </nav>
 </div>
 <div class="benefits"><div class="benefit"><span>✧</span><div><b>Thoughtful selection</b><small>Pieces chosen with purpose</small></div></div><div class="benefit"><span>◇</span><div><b>Secure checkout</b><small>Protected Paystack payments</small></div></div><div class="benefit"><span>⌂</span><div><b>Delivery across Nigeria</b><small>Carefully handled to your door</small></div></div></div>
-<section class="section" id="shop"><div class="section-head"><div class="eyebrow">Discover ebnimaam</div><h2>Best Sellers</h2><p>Customer favourites and useful finds, updated from the live Ebnimaam catalogue.</p></div><div class="filters"><button class="filter active" data-filter="All">All pieces</button><button class="filter" data-filter="Apparel">Apparel</button><button class="filter" data-filter="Accessories">Accessories</button><button class="filter" data-filter="Essentials">Essentials</button></div><div class="compare-toolbar"><button id="compareOpen" type="button" disabled>Compare selected (0)</button><span id="compareHint" style="font-size:11px;color:var(--muted)" aria-live="polite">Choose up to three products to compare.</span></div><div class="products" id="products"></div></section>
+<section class="section" id="shop"><div class="section-head"><div class="eyebrow">Discover ebnimaam</div><div class="best-seller-title"><h2>Best Sellers</h2><a href="#shop">See All <span aria-hidden="true">→</span></a></div><p>Customer favourites and useful finds, updated from the live Ebnimaam catalogue.</p></div><div class="filters"><button class="filter active" data-filter="All">All pieces</button><button class="filter" data-filter="Apparel">Apparel</button><button class="filter" data-filter="Accessories">Accessories</button><button class="filter" data-filter="Essentials">Essentials</button></div><div class="compare-toolbar"><button id="compareOpen" type="button" disabled>Compare selected (0)</button><span id="compareHint" style="font-size:11px;color:var(--muted)" aria-live="polite">Choose up to three products to compare.</span></div><div class="products" id="products"></div></section>
 
 <section class="referral-promo" aria-label="Ebnimaam referral rewards">
   <div class="referral-gift" aria-hidden="true">🎁</div>

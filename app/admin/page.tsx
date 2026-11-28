@@ -123,13 +123,19 @@ export default function Admin(){
  const paid=orders.filter(o=>['paid','success','successful'].includes(String(o.status||'').toLowerCase()));const revenue=paid.reduce((a,o)=>a+Number(o.amount_kobo||0),0);
  const salesByDay=useMemo(()=>{
   const today=new Date();today.setHours(0,0,0,0);
-  return Array.from({length:7},(_,index)=>{
-   const date=new Date(today);date.setDate(today.getDate()-(6-index));
+  const first=new Date(today);first.setDate(today.getDate()-29);
+  return Array.from({length:30},(_,index)=>{
+   const date=new Date(first);date.setDate(first.getDate()+index);
    const amount=paid.filter(order=>{const created=new Date(order.paid_at||order.created_at);return !Number.isNaN(created.getTime())&&created.getFullYear()===date.getFullYear()&&created.getMonth()===date.getMonth()&&created.getDate()===date.getDate()}).reduce((sum,order)=>sum+Number(order.amount_kobo||0)/100,0);
-   return {key:date.toISOString().slice(0,10),label:date.toLocaleDateString('en-NG',{weekday:'short'}),amount:Math.round(amount)};
+   const key=[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
+   return {key,label:date.toLocaleDateString('en-NG',{month:'short',day:'numeric'}),amount:Math.round(amount)};
   });
  },[orders]);
  const salesMax=Math.max(1,...salesByDay.map(day=>day.amount));
+ const chartPoints=salesByDay.map((day,index)=>`${24+(index*560/Math.max(1,salesByDay.length-1))},${174-(Number(day.amount||0)/salesMax)*142}`).join(' ');
+ const chartLastX=24+((Math.max(1,salesByDay.length)-1)*560/Math.max(1,salesByDay.length-1));
+ const chartLastY=174-(Number(salesByDay[salesByDay.length-1]?.amount||0)/salesMax)*142;
+ const chartAxisDays=salesByDay.filter((day,index)=>[0,6,13,20,29].includes(index));
 
  const lowStockThreshold=Number(settings.lowStockThreshold??3);
  const lowStockProducts=products.filter(p=>p.is_active===true&&Number(p.stock)>0&&Number(p.stock)<=lowStockThreshold);
@@ -308,22 +314,94 @@ main.admin-dashboard .editform{background:#fffefa;border-color:#e9e4db}
 @media(max-width:1120px){main.admin-dashboard{grid-template-columns:220px minmax(0,1fr)}main.admin-dashboard .admin-content{padding:22px 19px}main.admin-dashboard .stats{grid-template-columns:repeat(2,minmax(0,1fr))}main.admin-dashboard .admin-overview-panels{grid-template-columns:1fr}}
 @media(max-width:760px){main.admin-dashboard{display:flex;flex-direction:column;min-height:100vh}main.admin-dashboard .admin-header{width:100%;padding:15px 17px 12px;position:relative;border-bottom:1px solid #263750}main.admin-dashboard .admin-brand-lockup{font-size:22px;margin:0 0 9px}main.admin-dashboard .admin-brand-lockup img{width:36px;height:36px}main.admin-dashboard .admin-brand-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}main.admin-dashboard .admin-secure{display:inline-flex}main.admin-dashboard .admin-header h1{font-size:17px;margin:5px 0}main.admin-dashboard .admin-intro{font-size:10px}main.admin-dashboard .admin-nav{position:sticky;top:0;z-index:35;width:100%;height:auto;min-height:0;display:flex;flex-direction:row;overflow-x:auto;overflow-y:hidden;white-space:nowrap;padding:8px 10px;border-bottom:1px solid #263750}main.admin-dashboard .admin-nav .nav-label{display:none}main.admin-dashboard .admin-nav a{flex:0 0 auto;min-height:36px;padding:8px 10px;font-size:11px}main.admin-dashboard .admin-content{width:100%;min-height:0;padding:17px 12px 25px}main.admin-dashboard .admin-topbar{align-items:flex-start;flex-direction:column;gap:10px;margin-bottom:15px}main.admin-dashboard .admin-topbar h2{font-size:23px}main.admin-dashboard .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}main.admin-dashboard .stat{padding:13px}main.admin-dashboard .stat strong{font-size:19px}main.admin-dashboard .admin-chart-card,main.admin-dashboard .admin-referral-card{padding:15px}main.admin-dashboard .admin-value-bar{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;padding:15px 9px}main.admin-dashboard .admin-value-bar>div{justify-content:flex-start;padding-left:8px}}
 @media(prefers-reduced-motion:reduce){main.admin-dashboard .admin-nav a{transition:none}}
+
+/* Reference-matched desktop merchant dashboard */
+main.admin-dashboard{grid-template-columns:238px minmax(0,1fr);grid-template-rows:96px minmax(0,1fr);align-items:stretch}
+main.admin-dashboard .admin-header{grid-column:1;grid-row:1;min-height:96px;height:96px;display:flex;align-items:center;padding:18px 17px;border-right:1px solid #c99550;border-bottom:0}
+main.admin-dashboard .admin-brand-lockup{font-size:25px;margin:0;white-space:nowrap}
+main.admin-dashboard .admin-brand-lockup img{width:42px;height:42px;border-radius:11px;background:transparent;padding:0}
+main.admin-dashboard .admin-brand-row,main.admin-dashboard .admin-header h1,main.admin-dashboard .admin-intro,main.admin-dashboard .admin-header-links{display:none}
+main.admin-dashboard .admin-nav{grid-column:1;grid-row:2;position:sticky;top:0;height:calc(100vh - 96px);min-height:480px;padding:14px 11px 24px;border-right:1px solid #c99550}
+main.admin-dashboard .admin-nav .nav-label{display:none}
+main.admin-dashboard .admin-nav a{min-height:47px;gap:11px;padding:10px 12px;border-radius:10px;font-size:12px}
+main.admin-dashboard .admin-nav a:before{content:"◇";display:inline-grid;place-items:center;width:19px;flex:0 0 19px;color:#e4b65c;font-size:18px;line-height:1}
+main.admin-dashboard .admin-nav a[href="#overview"]:before{content:"⌂"}
+main.admin-dashboard .admin-nav a[href="#orders"]:before{content:"🛒";font-size:15px}
+main.admin-dashboard .admin-nav a[href="#products"]:before{content:"◧"}
+main.admin-dashboard .admin-nav a[href="#inventory"]:before{content:"▦"}
+main.admin-dashboard .admin-nav a[href="#customers"]:before{content:"♟"}
+main.admin-dashboard .admin-nav a[href="/admin/loyalty"]:before{content:"♙"}
+main.admin-dashboard .admin-nav a[href="#content"]:before{content:"▤"}
+main.admin-dashboard .admin-nav a[href="#settings"]:before{content:"⚙"}
+main.admin-dashboard .admin-content{grid-column:2;grid-row:1/span 2;padding:25px clamp(17px,2.2vw,34px) 34px}
+main.admin-dashboard .admin-topbar{margin-bottom:20px}
+main.admin-dashboard .admin-topbar h2{font-size:30px}
+main.admin-dashboard .stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+main.admin-dashboard .stat{min-height:108px;padding:17px;border-radius:14px}
+main.admin-dashboard .admin-overview-panels{grid-template-columns:minmax(0,1.35fr) minmax(280px,1fr);gap:15px;margin:20px 0 15px}
+main.admin-dashboard .admin-chart-card{min-height:300px;padding:17px}
+main.admin-dashboard .admin-chart-line{height:205px;margin-top:20px;padding:0 2px;overflow:hidden}
+main.admin-dashboard .admin-chart-line svg{display:block;width:100%;height:175px;overflow:visible}
+main.admin-dashboard .admin-chart-axis{display:flex;justify-content:space-between;gap:6px;margin-top:4px;color:#6c7888;font-size:9px;white-space:nowrap}
+main.admin-dashboard .admin-referral-card{min-height:300px;padding:20px;background:radial-gradient(circle at 80% 10%,#21456c 0,transparent 35%),linear-gradient(145deg,#06172d,#0b2340)}
+main.admin-dashboard .admin-referral-icon{font-size:42px}
+main.admin-dashboard .admin-referral-card h3{font-size:23px;line-height:1.22}
+main.admin-dashboard .admin-lower-panels{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(245px,.9fr);gap:14px;align-items:stretch;margin:17px 0 22px}
+main.admin-dashboard .admin-lower-panels .admin-orders-table{min-width:0;margin:0;padding:15px 14px;border:1px solid #e9e4db;border-radius:15px;background:#fff;box-shadow:0 8px 24px #0a192f0a}
+main.admin-dashboard .admin-orders-table table{min-width:0}
+main.admin-dashboard .admin-orders-table th{padding:9px 6px;font-size:8px}
+main.admin-dashboard .admin-orders-table td{padding:11px 6px;font-size:10px;white-space:normal}
+main.admin-dashboard .admin-inventory-preview{min-width:0;padding:15px 13px;border:1px solid #e9e4db;border-radius:15px;background:#fff;box-shadow:0 8px 24px #0a192f0a}
+main.admin-dashboard .admin-inventory-preview .admin-panel-head{margin-bottom:12px}
+main.admin-dashboard .admin-inventory-preview .admin-panel-head h3{font-size:15px;color:#0a192f}
+main.admin-dashboard .admin-inventory-preview .admin-panel-head a{font-size:10px;color:#0a192f;text-decoration:none;white-space:nowrap}
+main.admin-dashboard .admin-inventory-preview .inventory-alert-item{padding:8px;border-radius:10px;gap:9px}
+main.admin-dashboard .admin-inventory-preview .inventory-alert-item img,
+main.admin-dashboard .admin-inventory-preview .inventory-placeholder{width:38px;height:38px}
+main.admin-dashboard .admin-inventory-preview .inventory-alert-item b{font-size:10px}
+main.admin-dashboard .admin-inventory-preview .inventory-alert-item small{font-size:9px}
+main.admin-dashboard .admin-value-bar{margin-top:24px}
+@media(max-width:1160px){
+ main.admin-dashboard{grid-template-columns:218px minmax(0,1fr)}
+ main.admin-dashboard .admin-overview-panels{grid-template-columns:1fr}
+ main.admin-dashboard .admin-referral-card{min-height:230px}
+ main.admin-dashboard .admin-lower-panels{grid-template-columns:1fr}
+}
+@media(max-width:760px){
+ main.admin-dashboard{display:flex;flex-direction:column;min-height:100vh}
+ main.admin-dashboard .admin-header{width:100%;height:auto;min-height:72px;padding:13px 16px;border-right:0;border-bottom:1px solid #c99550}
+ main.admin-dashboard .admin-brand-lockup{font-size:22px}
+ main.admin-dashboard .admin-brand-lockup img{width:36px;height:36px}
+ main.admin-dashboard .admin-nav{position:sticky;top:0;z-index:35;width:100%;height:auto;min-height:0;display:flex;flex-direction:row;overflow-x:auto;overflow-y:hidden;white-space:nowrap;padding:8px 10px;border-right:0;border-bottom:1px solid #c99550}
+ main.admin-dashboard .admin-nav a{flex:0 0 auto;min-height:36px;padding:8px 10px}
+ main.admin-dashboard .admin-nav a:before{width:16px;flex-basis:16px}
+ main.admin-dashboard .admin-content{width:100%;min-height:0;padding:15px 12px 25px}
+ main.admin-dashboard .admin-topbar h2{font-size:23px}
+ main.admin-dashboard .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ main.admin-dashboard .stat{min-height:82px;padding:12px}
+ main.admin-dashboard .stat strong{font-size:18px}
+ main.admin-dashboard .admin-chart-card{min-height:250px}
+ main.admin-dashboard .admin-referral-card{min-height:205px}
+ main.admin-dashboard .admin-lower-panels{grid-template-columns:1fr;gap:12px}
+ main.admin-dashboard .admin-orders-table table{min-width:540px}
+ main.admin-dashboard .admin-value-bar{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 `;
- return <main className={ok?'admin-dashboard':'admin-login'}><style>{css}</style><header className="admin-header"><a className="admin-brand-lockup" href="/store.html"><img src="/assets/icon-512.png" alt="Ebnimaam logo"/><span>ebnimaam</span></a><div className="admin-brand-row"><span className="admin-eyebrow">OWNER WORKSPACE</span><br/><span className="admin-secure">Secure administration</span></div><h1>Control centre</h1><p className="admin-intro">One workspace for your storefront, orders, stock, customers and store content.</p><div className="admin-header-links"><a href="/store.html">Open storefront ↗</a><a href="/admin/loyalty">Rewards & referrals</a><a href="/admin/coupons">Coupons</a><a href="/privacy.html">Privacy</a><a href="/returns.html">Returns</a><a href="/terms.html">Terms</a></div></header>{ok&&<nav className="admin-nav" aria-label="Admin sections"><span className="nav-label">Workspace</span><a className="primary" href="#overview">Overview</a><a href="#inventory">Inventory alerts</a><a href="#stock-history">Stock movements</a><a href="#orders">Orders</a><a href="#products">Products</a><a href="#customers">Customers</a><a href="#support">Customer support</a><a href="#settings">Store settings</a><a href="#activity">Admin activity</a><a href="#content">Website news</a><span className="nav-label">Store tools</span><a href="/admin/loyalty">Rewards & referrals</a><a href="/admin/coupons">Coupons & promotions</a></nav>}<div className="admin-content">{!ok?<form onSubmit={async e=>{e.preventDefault();setErr('');const r=await fetch('/api/admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})});if(r.ok)load();else setErr('Login failed.')}}><h2>Administrator sign in</h2><label>Admin password<input type="password" value={pass} onChange={e=>setPass(e.target.value)} required/></label><button>Sign in</button>{err&&<p role="alert">{err}</p>}</form>:<><div className="admin-topbar"><div><h2>Welcome back</h2><p>Here is what is happening with your store today.</p></div><span className="admin-live">Online store active</span></div><div className="stats" id="overview"><div className="stat">Total sales<strong>₦{(revenue/100).toLocaleString()}</strong></div><div className="stat">Total orders<strong>{orders.length}</strong></div><div className="stat">Customers<strong>{customers.length}</strong></div><div className="stat">Published products<strong>{products.filter(product=>product.is_active===true).length}</strong></div></div><div className="admin-overview-panels">
+ return <main className={ok?'admin-dashboard':'admin-login'}><style>{css}</style><header className="admin-header"><a className="admin-brand-lockup" href="/store.html"><img src="/assets/icon-512.png" alt="Ebnimaam logo"/><span>ebnimaam</span></a><div className="admin-brand-row"><span className="admin-eyebrow">OWNER WORKSPACE</span><br/><span className="admin-secure">Secure administration</span></div><h1>Control centre</h1><p className="admin-intro">One workspace for your storefront, orders, stock, customers and store content.</p><div className="admin-header-links"><a href="/store.html">Open storefront ↗</a><a href="/admin/loyalty">Rewards & referrals</a><a href="/admin/coupons">Coupons</a><a href="/privacy.html">Privacy</a><a href="/returns.html">Returns</a><a href="/terms.html">Terms</a></div></header>{ok&&<nav className="admin-nav" aria-label="Admin sections"><span className="nav-label">Workspace</span><a className="primary" href="#overview">Overview</a><a href="#inventory">Inventory</a><a href="#stock-history">Stock movements</a><a href="#orders">Orders</a><a href="#products">Products</a><a href="#customers">Customers</a><a href="#support">Customer support</a><a href="#settings">Settings</a><a href="#activity">Admin activity</a><a href="#content">Store content</a><span className="nav-label">Store tools</span><a href="/admin/loyalty">Rewards & referrals</a><a href="/admin/coupons">Coupons & promotions</a></nav>}<div className="admin-content">{!ok?<form onSubmit={async e=>{e.preventDefault();setErr('');const r=await fetch('/api/admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})});if(r.ok)load();else setErr('Login failed.')}}><h2>Administrator sign in</h2><label>Admin password<input type="password" value={pass} onChange={e=>setPass(e.target.value)} required/></label><button>Sign in</button>{err&&<p role="alert">{err}</p>}</form>:<><div className="admin-topbar"><div><h2>Welcome back</h2><p>Here is what is happening with your store today.</p></div><span className="admin-live">Online store active</span></div><div className="stats" id="overview"><div className="stat">Total sales<strong>₦{(revenue/100).toLocaleString()}</strong></div><div className="stat">Total orders<strong>{orders.length}</strong></div><div className="stat">Customers<strong>{customers.length}</strong></div><div className="stat">Published products<strong>{products.filter(product=>product.is_active===true).length}</strong></div></div><div className="admin-overview-panels">
  <section className="admin-chart-card">
-  <div className="admin-panel-head"><h3>Sales overview</h3><span>Last 7 days</span></div>
+  <div className="admin-panel-head"><h3>Sales Overview</h3><span>Last 30 Days</span></div>
   <div className="admin-chart-total">₦{salesByDay.reduce((sum,day)=>sum+day.amount,0).toLocaleString('en-NG',{maximumFractionDigits:0})}</div>
   <div className="admin-chart-sub">Verified paid-order value in the selected period</div>
-  {salesByDay.some(day=>day.amount>0)?<div className="admin-chart-bars" role="img" aria-label="Paid order value over the last seven days">{salesByDay.map((day,index)=><div className="admin-chart-day" key={day.key}><div className="admin-chart-bar" title={day.label+': ₦'+day.amount.toLocaleString()} style={{height:Math.max(4,day.amount/salesMax*100)+'%'}}></div><small>{day.label}</small></div>)}</div>:<div className="admin-chart-empty">No verified paid orders in the last 7 days yet.</div>}
+  {salesByDay.some(day=>day.amount>0)?<div className="admin-chart-line" role="img" aria-label="Verified paid sales over the last 30 days"><svg viewBox="0 0 608 204" preserveAspectRatio="none" aria-hidden="true">{[32,67,102,137,174].map(y=><line key={y} x1="24" x2="584" y1={y} y2={y} stroke="#e9edf2" strokeWidth="1"/>) }<polyline points={chartPoints} fill="none" stroke="#143d88" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx={chartLastX} cy={chartLastY} r="7" fill="#fff" stroke="#1455b8" strokeWidth="4"/></svg><div className="admin-chart-axis">{chartAxisDays.map(day=><span key={day.key}>{day.label}</span>)}</div></div>:<div className="admin-chart-empty">No verified paid orders in the last 30 days yet.</div>}
  </section>
- <aside className="admin-referral-card"><div><div className="admin-referral-icon">✦</div><h3>5 successful referrals = ₦1,000</h3><p>Earn ₦200 in store credit for each friend who completes a first verified paid purchase. Invite five friends to unlock ₦1,000.</p></div><a href="/admin/loyalty">Open rewards workspace →</a></aside>
-</div><section className="admin-orders-table">
+ <aside className="admin-referral-card"><div><div className="admin-referral-icon">🎁</div><h3>5 successful referrals = ₦1,000</h3><p>Earn ₦200 in store credit for each friend who completes a first verified paid purchase. Invite five friends to unlock ₦1,000.</p></div><a href="/admin/loyalty">Open rewards workspace →</a></aside>
+</div><div className="admin-lower-panels"><section className="admin-orders-table">
  <div className="admin-panel-head"><h3>Recent orders</h3><a href="#orders">View all →</a></div>
  <div className="admin-table-scroll"><table><thead><tr><th>Order #</th><th>Customer</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>
  {orders.slice(0,4).map(o=>{const status=String(o.fulfilment_status||'processing').toLowerCase().replace(/[^a-z]+/g,'-');return <tr key={o.reference}><td><b>{o.reference}</b></td><td>{o.customer_name||o.customer_email||'Customer'}</td><td>₦{(Number(o.amount_kobo||0)/100).toLocaleString('en-NG')}</td><td><span className={'status-pill status-'+status}>{String(o.fulfilment_status||'processing').replace(/_/g,' ')}</span></td><td>{new Date(o.created_at).toLocaleDateString('en-NG',{month:'short',day:'numeric'})}</td></tr>})}
  {orders.length===0&&<tr><td colSpan={5} className="admin-table-empty">New orders will appear here after customers complete checkout.</td></tr>}
  </tbody></table></div>
- </section><div style={{marginTop:14}}><button onClick={()=>load()}>Refresh data</button><button className="secondary" onClick={exportWebsitePdf}>Download all website information (PDF)</button><button className="secondary" onClick={async()=>{await fetch('/api/admin',{method:'DELETE'});setOk(false)}}>Logout</button></div><h2 id="inventory">Inventory alerts</h2><article><b>Low-stock threshold: {lowStockThreshold} units</b><p className="muted">Active products at or below this quantity need restocking attention. Products at zero stock are listed separately.</p>{lowStockProducts.length?<div className="inventory-alert-list">{lowStockProducts.map(p=><div className="inventory-alert-item" key={p.id}>{p.image?<img src={p.image} alt=""/>:<span className="inventory-placeholder">◇</span>}<span><b>{p.name}</b><small>Only {p.stock} left</small></span><em className={Number(p.stock)<=2?'critical':'warning'}>!</em></div>)}</div>:<p className="muted">No active products are currently below the low-stock threshold.</p>}{outOfStockProducts.length>0&&<p><b>Out of stock:</b> {outOfStockProducts.map(p=>p.name).join(", ")}</p>}</article><h2 id="stock-history">Stock adjustments & movement history</h2>
+ </section><aside className="admin-inventory-preview"><div className="admin-panel-head"><h3>Inventory Alerts</h3><a href="#inventory">View all →</a></div>{[...outOfStockProducts,...lowStockProducts.filter(p=>!outOfStockProducts.some(out=>out.id===p.id))].slice(0,3).map(p=><div className="inventory-alert-item" key={p.id}>{p.image?<img src={p.image} alt=""/>:<span className="inventory-placeholder">◇</span>}<span><b>{p.name}</b><small>{Number(p.stock)<=0?'Out of stock':`Only ${p.stock} left`}</small></span><em className={Number(p.stock)<=2?'critical':'warning'}>!</em></div>)}{outOfStockProducts.length+lowStockProducts.length===0&&<p className="muted">No low-stock items need attention.</p>}</aside></div><div style={{marginTop:14}}><button onClick={()=>load()}>Refresh data</button><button className="secondary" onClick={exportWebsitePdf}>Download all website information (PDF)</button><button className="secondary" onClick={async()=>{await fetch('/api/admin',{method:'DELETE'});setOk(false)}}>Logout</button></div><h2 id="inventory">Inventory alerts</h2><article><b>Low-stock threshold: {lowStockThreshold} units</b><p className="muted">Active products at or below this quantity need restocking attention. Products at zero stock are listed separately.</p>{lowStockProducts.length?<div className="inventory-alert-list">{lowStockProducts.map(p=><div className="inventory-alert-item" key={p.id}>{p.image?<img src={p.image} alt=""/>:<span className="inventory-placeholder">◇</span>}<span><b>{p.name}</b><small>Only {p.stock} left</small></span><em className={Number(p.stock)<=2?'critical':'warning'}>!</em></div>)}</div>:<p className="muted">No active products are currently below the low-stock threshold.</p>}{outOfStockProducts.length>0&&<p><b>Out of stock:</b> {outOfStockProducts.map(p=>p.name).join(", ")}</p>}</article><h2 id="stock-history">Stock adjustments & movement history</h2>
 <p className="muted">Every adjustment is validated on the server and recorded with the previous quantity, new quantity, reason and variant where applicable. Use a positive number to add stock and a negative number to remove stock.</p>
 <form className="editform" onSubmit={saveStockAdjustment}>
  <label>Product<select required value={stockAdjustment.productId} onChange={e=>setStockAdjustment({...stockAdjustment,productId:e.target.value,variant:''})}>
