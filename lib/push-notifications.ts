@@ -31,7 +31,14 @@ export async function savePushSubscription(ownerKey: string, subscription: any, 
   const auth = String(subscription?.keys?.auth || '').trim();
   if (!endpoint || !p256dh || !auth) throw new Error('The browser returned an incomplete notification subscription.');
   const parsed = new URL(endpoint);
-  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new Error('The notification endpoint must use HTTPS.');
+  const host = parsed.hostname.toLowerCase();
+  const trustedHost = host === 'fcm.googleapis.com'
+    || host === 'updates.push.services.mozilla.com'
+    || host.endsWith('.push.services.mozilla.com')
+    || host === 'web.push.apple.com';
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || !trustedHost) {
+    throw new Error('The notification provider endpoint is not supported.');
+  }
   if (endpoint.length > 4096 || p256dh.length > 500 || auth.length > 500) throw new Error('The notification subscription is too large.');
   await pool.query(
     \`INSERT INTO public.ebnimaam_push_subscriptions(owner_key,endpoint,p256dh,auth,expiration_time,user_agent)
