@@ -197,4 +197,4 @@
  load();
 })();
 </script>
-<script>(function(){fetch('/api/store-settings',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(data=>{const theme=data&&data.settings&&data.settings.theme;if(!theme)return;const keys={navy:'--navy',navy2:'--navy2',gold:'--gold',cream:'--cream',paper:'--paper',ink:'--ink'};Object.keys(keys).forEach(k=>{if(/^#[0-9a-f]{6}$/i.test(String(theme[k]||'')))document.documentElement.style.setProperty(keys[k],theme[k])})}).catch(()=>{})})();</script></body></html>
+<script src="/assets/ebnimaam-theme.js" defer></script></body></html>
