@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0A192F"><meta name="description" content="Install the official Ebnimaam Android shopping app.">
+<title>Download the Ebnimaam app</title><link rel="icon" href="/assets/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#0A192F;--navy2:#10233E;--gold:#D6A64C;--cream:#FAF8F2;--paper:#FFFEFA;--ink:#17263C;--muted:#7B8490;--line:#E9E2D7}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;background:var(--cream);color:var(--ink);font-family:'DM Sans',Arial,sans-serif}
+a{color:inherit;text-decoration:none}button{font:inherit;cursor:pointer}
+.header{height:68px;background:var(--navy);border-bottom:1px solid #c99550;display:flex;align-items:center;justify-content:space-between;padding:0 max(20px,calc((100vw - 1160px)/2))}
+.brand{display:flex;align-items:center;gap:11px;color:#f4ce82;font:600 23px 'Playfair Display',Georgia,serif}.brand img{width:38px;height:38px;object-fit:contain}.back{font-size:12px;color:#fff;opacity:.9}
+main{max-width:1160px;margin:auto;padding:38px 20px 70px}.eyebrow{font-size:10px;font-weight:800;letter-spacing:.2em;color:#b17c34}
+.hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(300px,.9fr);gap:34px;align-items:center;border:1px solid #d7c39f;border-radius:24px;padding:clamp(22px,4vw,48px);background:radial-gradient(circle at 80% 15%,#2e5075 0,transparent 38%),linear-gradient(130deg,#06172d,#102b4b);color:#fff;box-shadow:0 20px 55px #0a192f22}
+.hero h1{margin:12px 0 15px;color:#fff;font:600 clamp(36px,5.5vw,60px)/1.03 'Playfair Display',Georgia,serif;letter-spacing:-.04em}.hero p{max-width:530px;color:#dbe2ec;font-size:14px;line-height:1.8}
+.actions{display:flex;flex-wrap:wrap;gap:11px;margin-top:25px}.primary,.secondary{min-height:48px;padding:0 20px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;gap:10px;font-size:12px;font-weight:800}
+.primary{border:1px solid #e7bd6b;background:linear-gradient(120deg,#f2cf83,#c58c3d);color:#10233e;box-shadow:0 7px 17px #0003}.secondary{border:1px solid #ffffff48;background:#ffffff12;color:#fff}
+.app-art{position:relative;min-height:290px;display:grid;place-items:center}.phone{width:185px;height:340px;border:5px solid #d8dce2;border-radius:31px;background:#fff;box-shadow:0 25px 50px #0005;overflow:hidden;transform:rotate(5deg);padding:8px}
+.phone-screen{height:100%;border-radius:19px;overflow:hidden;background:#faf8f2;color:#0a192f}.phone-top{height:31px;background:#0a192f;color:#fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800}
+.phone-hero{height:112px;padding:12px;background:linear-gradient(100deg,#071a31a8,#071a31),url('/assets/ebnimaam-hero-gold.webp') center/cover;color:#fff;display:flex;flex-direction:column;justify-content:end}
+.phone-hero b{font:600 20px/1.1 Georgia,serif}.phone-hero small{font-size:8px;color:#efcf8f;margin-top:7px}
+.phone-search{margin:10px 7px;height:25px;border:1px solid #e8e0d3;border-radius:20px;background:white;color:#7c8490;font-size:8px;padding:7px}
+.phone-cats{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:5px 7px}.phone-cats i{height:35px;border-radius:50%;background:#eee6d7;display:grid;place-items:center;color:#102544;font-style:normal}
+.phone-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;padding:7px}.phone-product{height:87px;border:1px solid #e8e0d3;border-radius:8px;background:#fff;padding:7px}
+.phone-product span{display:block;height:48px;border-radius:5px;background:#f0ede6}.phone-product b{display:block;font-size:7px;margin-top:5px}.art-glow{position:absolute;width:260px;height:260px;border-radius:50%;background:#e2b66225;filter:blur(4px)}
+.feature-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:24px}.feature{border:1px solid var(--line);border-radius:16px;background:var(--paper);padding:20px}
+.feature b{display:block;color:var(--navy);font-size:13px;margin-bottom:7px}.feature p{color:var(--muted);font-size:11px;line-height:1.65;margin:0}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:24px}.step{padding:20px;border-radius:16px;background:#fff;border:1px solid var(--line)}
+.step-number{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;background:#f4e4c0;color:#74501c;font-weight:900;font-size:11px}
+.step h3{font-size:13px;margin:12px 0 6px;color:var(--navy)}.step p{font-size:11px;color:var(--muted);line-height:1.65;margin:0}
+.notice{margin-top:22px;padding:15px;border-radius:12px;background:#f5eddf;border:1px solid #e4d2b5;color:#654c29;font-size:11px;line-height:1.6}
+footer{background:var(--navy);color:#d5dce5;padding:24px;text-align:center;font-size:10px}
+@media(max-width:760px){.header{height:62px;padding:0 15px}.brand{font-size:19px}.brand img{width:32px;height:32px}.back{font-size:10px}main{padding:18px 12px 45px}.hero{grid-template-columns:1fr;gap:0;border-radius:18px;padding:23px 18px}.hero h1{font-size:39px}.hero p{font-size:12px}.app-art{min-height:285px;margin-top:5px}.phone{transform:rotate(2deg) scale(.88)}.feature-strip{grid-template-columns:1fr}.steps{grid-template-columns:1fr}.actions{flex-direction:column}.actions a{width:100%}}
+</style></head>
+<body>
+<header class="header"><a class="brand" href="/store.html"><img src="/assets/icon-192.png" alt="">Ebnimaam</a><a class="back" href="/store.html">← Back to shop</a></header>
+<main>
+<section class="hero">
+ <div><div class="eyebrow">THE OFFICIAL EBNIMAAM ANDROID APP</div><h1>Your store.<br>Your phone.<br>Always close.</h1><p>Shop Ebnimaam in a dedicated app experience. Keep your account, saved items, checkout, rewards and orders connected to the live store, with Android system Back navigation.</p>
+  <div class="actions"><a class="primary" href="/api/download-app" id="downloadApk">↓ Download Android APK</a><a class="secondary" href="/store.html">Open the website</a></div>
+  <p id="downloadStatus" role="status" aria-live="polite" style="font-size:10px;margin-top:14px"></p>
+ </div>
+ <div class="app-art"><div class="art-glow"></div><div class="phone"><div class="phone-screen"><div class="phone-top">EBNIMAAM</div><div class="phone-hero"><b>Shop Smart,<br>Live Better.</b><small>PREMIUM QUALITY · GREAT PRICES</small></div><div class="phone-search">⌕ &nbsp; Search products…</div><div class="phone-cats"><i>♧</i><i>▣</i><i>⌂</i><i>✦</i></div><div class="phone-grid"><div class="phone-product"><span></span><b>Fashion picks</b></div><div class="phone-product"><span></span><b>Everyday finds</b></div></div></div></div></div>
+</section>
+<section class="feature-strip"><article class="feature"><b>Secure account and checkout</b><p>Your Ebnimaam account, Paystack checkout, saved items and orders stay connected to the live store.</p></article><article class="feature"><b>Android system Back support</b><p>Use the phone’s Back button to navigate backward through pages visited inside the app.</p></article><article class="feature"><b>Rewards and order care</b><p>Open Mind Arena, referral rewards and signed-in order tracking in the same app experience.</p></article></section>
+<section class="steps"><article class="step"><div class="step-number">1</div><h3>Download the APK</h3><p>Tap the gold download button to save the official installer.</p></article><article class="step"><div class="step-number">2</div><h3>Install Ebnimaam</h3><p>Open the downloaded file and approve “Install unknown apps” for your browser or file manager if Android asks.</p></article><article class="step"><div class="step-number">3</div><h3>Open and shop</h3><p>Launch Ebnimaam from your app screen. Sign in and use the store, rewards and tracking views.</p></article></section>
+<div class="notice">Android may show a security prompt because this APK is distributed directly rather than through Google Play. Only install the file downloaded from this official Ebnimaam website. Keep Play Protect enabled.</div>
+</main><footer>© <span id="year"></span> Ebnimaam · Everyday, elevated.</footer>
+<script>document.getElementById('year').textContent=String(new Date().getFullYear());document.getElementById('downloadApk').addEventListener('click',function(){document.getElementById('downloadStatus').textContent='Checking the latest Android installer…'});</script>
+<script src="/assets/ebnimaam-theme.js" defer></script>
+</body></html>

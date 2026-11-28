@@ -16,6 +16,7 @@ permissions:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -39,8 +40,8 @@ jobs:
         run: npm install
       - name: Verify Next.js production build
         run: npm run build
-      - name: Install Capacitor tooling and icon generator
-        run: npm install --no-save --package-lock=false @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/status-bar@7 @capacitor/assets sharp
+      - name: Install Capacitor tooling, Android back navigation and icon generator
+        run: npm install --no-save --package-lock=false @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/status-bar@7 @capacitor/app@7 @capacitor/assets sharp
       - name: Prepare branded app icon from the supplied Ebnimaam logo
         run: |
           mkdir -p assets
@@ -62,11 +63,22 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug
+      - name: Verify APK and create release checksum
+        run: |
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          test "$(stat -c%s "$APK")" -gt 1048576
+          sha256sum "$APK" > "$APK.sha256"
+          printf 'Ebnimaam Android App\\nBuild: %s\\nCommit: %s\\nPackage: com.ebnimaam.store\\n' "$GITHUB_RUN_NUMBER" "$GITHUB_SHA" > android/app/build/outputs/apk/version.txt
       - name: Publish APK download
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-apk-${{ github.run_number }}
           name: Ebnimaam Android App ${{ github.run_number }}
           make_latest: true
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          body: 'Install the APK on Android. The SHA-256 checksum and build information are included for verification. Android system Back navigates backward through the WebView page history while the app is open.'
+          files: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/debug/app-debug.apk.sha256
+            android/app/build/outputs/apk/version.txt
           fail_on_unmatched_files: true

@@ -1,13 +1,13 @@
 {
   "id": "/store.html",
-  "name": "ebnimaam",
-  "short_name": "ebnimaam",
-  "description": "Thoughtfully chosen everyday essentials from ebnimaam.",
+  "name": "Ebnimaam — Everyday, elevated.",
+  "short_name": "Ebnimaam",
+  "description": "Shop Ebnimaam from a premium, secure and installable Nigerian storefront.",
   "start_url": "/store.html",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#faf8f2",
-  "theme_color": "#102544",
+  "background_color": "#FAF8F2",
+  "theme_color": "#0A192F",
   "icons": [
     {
       "src": "/assets/icon-192.png",

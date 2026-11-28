@@ -1,6 +1,6 @@
 {
   "appId": "com.ebnimaam.store",
-  "appName": "ebnimaam",
+  "appName": "Ebnimaam",
   "webDir": "public",
   "server": {
     "url": "https://ebnimaam.vercel.app/store.html",
@@ -16,7 +16,7 @@
     "StatusBar": {
       "overlaysWebView": false,
       "style": "LIGHT",
-      "backgroundColor": "#102544"
+      "backgroundColor": "#0A192F"
     }
   }
 }
