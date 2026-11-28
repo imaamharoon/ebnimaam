@@ -96,6 +96,7 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
         const current = await fetch(base + '/get-session', { headers: { cookie: req.headers.get('cookie') || '', origin: url.origin }, cache: 'no-store' });
         if (current.ok) previousUser = (await current.json())?.user || null;
       } catch { /* Upstream sign-out still proceeds. */ }
+      if (!previousUser) previousUser = await resolveCustomerSessionUser(req);
     }
     const upstream = await fetch(target, init);
     const upstreamPayload = upstream.clone();
