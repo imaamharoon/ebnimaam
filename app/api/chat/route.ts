@@ -180,11 +180,7 @@ export async function POST(req: Request) {
       mode:'quick-help',
     });
 
-    if (!response.ok) {
-      return NextResponse.json({ reply: quickReply(messages[messages.length - 1].text), mode: 'quick-help' });
-    }
-    const reply = String(data?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-    return NextResponse.json({ reply: reply.slice(0, 3600) || quickReply(messages[messages.length - 1].text), mode: 'gemini', model });
+
   } catch {
     return NextResponse.json({ error: 'Network error reaching support. Please use WhatsApp.' }, { status: 503 });
   }
