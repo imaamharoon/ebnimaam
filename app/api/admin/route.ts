@@ -9,7 +9,8 @@ import { notifyOrder } from '../../../lib/push-notifications';
 
 export const runtime = 'nodejs';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
-const secret = process.env.ADMIN_PASSWORD || process.env.AUTH_SECRET || '';
+const secret = process.env.ADMIN_PASSWORD || '';
+const sessionSecret = process.env.ADMIN_PASSWORD || process.env.AUTH_SECRET || '';
 
 async function ensureAdminCredentialSchema() {
   await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_admin_credentials(
@@ -29,13 +30,13 @@ function hashAdminPassword(password: string) {
   try {
     if (!(await checkRateLimit(req, 'admin-signin', 8, 15 * 60))) return NextResponse.json({ error: 'Too many administrator sign-in attempts. Please wait 15 minutes.' }, { status: 429, headers: { 'retry-after': '900' } });
     const { password } = await req.json();
-    if (!secret) return NextResponse.json({ error: 'Admin session signing is not configured.' }, { status: 503 });
+    if (!secret || !sessionSecret) return NextResponse.json({ error: 'Administrator sign-in is not configured.' }, { status: 503 });
     if (typeof password !== 'string' || password.length > 256 || !(await verifyAdminPassword(password))) {
       return NextResponse.json({ error: 'Incorrect password.' }, { status: 401 });
     }
     await recordAdminActivity('admin.login.success', 'admin_session', null, { method: 'password' });
     const response = NextResponse.json({ ok: true });
-    response.cookies.set('ebn_admin', createAdminSession(secret), {
+    response.cookies.set('ebn_admin', createAdminSession(sessionSecret), {
       httpOnly: true, secure: new URL(req.url).protocol === 'https:', sameSite: 'strict',
       path: '/', maxAge: ADMIN_SESSION_MAX_AGE,
     });
@@ -46,7 +47,7 @@ function hashAdminPassword(password: string) {
 }
 
 export async function GET(req: Request) {
-  if (!isAdminRequest(req, secret)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!isAdminRequest(req, sessionSecret)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     await ensureOrderEmailEventsTable();
     await pool.query('ALTER TABLE public.ebnimaam_orders ADD COLUMN IF NOT EXISTS order_total_kobo BIGINT');
