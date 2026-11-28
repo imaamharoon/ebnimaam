@@ -22,8 +22,18 @@ function boot(){
   try{
    var response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:history})});
    var data=await response.json();if(!response.ok)throw new Error(data.error||"Support is temporarily unavailable.");
-   pending.textContent=data.reply||"Please use WhatsApp below for help from the team.";history.push({role:"assistant",text:pending.textContent});history=history.slice(-10);
-   var status=box.querySelector("#ebChatStatus");if(data.mode==="quick-help")status.textContent="Instant store guidance · Some detailed AI answers may be limited right now.";else status.textContent="Ebnimaam support assistant";
+   var replyText=data.reply||"Please use WhatsApp below for help from the team.";
+   pending.textContent=replyText;
+   history.push({role:"assistant",text:replyText});history=history.slice(-10);
+   var speak=create("button",{type:"button",className:"eb-chat-speak"},"🔊 Listen");
+   speak.addEventListener("click",function(){
+    if(!("speechSynthesis" in window)||!("SpeechSynthesisUtterance" in window)){box.querySelector("#ebChatStatus").textContent="Spoken replies are not supported in this browser.";return}
+    window.speechSynthesis.cancel();
+    var utterance=new SpeechSynthesisUtterance(replyText);utterance.lang="en-NG";utterance.rate=1.02;
+    window.speechSynthesis.speak(utterance);
+   });
+   pending.appendChild(speak);
+   var status=box.querySelector("#ebChatStatus");if(data.mode==="quick-help")status.textContent="Instant store guidance · Detailed AI replies activate when the server AI key is configured.";else status.textContent="Ebnimaam AI assistant · Tap Listen to hear this reply.";
   }catch(error){pending.textContent="I couldn't reach support just now. Please use WhatsApp below to speak to the team."}
   finally{send.disabled=false;messages.scrollTop=messages.scrollHeight}
  }

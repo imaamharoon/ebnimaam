@@ -115,7 +115,8 @@ export async function PATCH(req: Request) {
         client.release();
       }
       await recordAdminActivity('order.tracking.updated', 'order', reference, { carrier: carrier || null, hasTrackingUrl: Boolean(trackingUrl), hasTrackingCode: Boolean(trackingCode) });
-      return NextResponse.json({ ok: true, trackingCarrier: carrier, trackingCode, trackingUrl });
+      const notification = await sendOrderStatusEmail(reference,'tracking_updated',new URL(req.url).origin,'Courier tracking details have been updated by the Ebnimaam team.',true);
+      return NextResponse.json({ ok: true, trackingCarrier: carrier, trackingCode, trackingUrl, email_delivery_status:notification.deliveryStatus, email_reason:notification.reason||null });
     } catch {
       return NextResponse.json({ error: 'Courier tracking details could not be saved.' }, { status: 500 });
     }
