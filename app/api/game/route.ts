@@ -35,29 +35,90 @@ async function ensureGameSchema() {
   await gameSchemaReady;
 }
 
-function makePuzzle() {
-  const start = randomInt(2, 12);
-  const firstGap = randomInt(3, 9);
-  const gapGrowth = randomInt(2, 5);
-  const sequence = [start];
-  let gap = firstGap;
-  for (let index = 0; index < 5; index += 1) {
-    sequence.push(sequence[sequence.length - 1] + gap);
-    gap += gapGrowth;
+const GAME_TYPES = new Set(['pattern-vault','matrix-master','cipher-breaker','prime-labyrinth','logic-lock']);
+function shuffle<T>(values:T[]):T[] {
+  const list=[...values];
+  for(let i=list.length-1;i>0;i-=1){const j=randomInt(0,i+1);[list[i],list[j]]=[list[j],list[i]]}
+  return list;
+}
+function makeIndexedPuzzle(type:string,puzzle:any,answerLabel:string|number,allChoices:(string|number)[]) {
+  const choices=shuffle(Array.from(new Set(allChoices.map(String))));
+  const answer=choices.indexOf(String(answerLabel));
+  if(answer<0||choices.length!==4)throw new Error('Could not create a valid challenge.');
+  const fullPuzzle={...puzzle,choices};
+  return {sequence:{type,puzzle:fullPuzzle},options:[0,1,2,3],answer,puzzle:fullPuzzle};
+}
+function makePuzzle(type='pattern-vault') {
+  if(type==='pattern-vault'){
+    const start=randomInt(2,12),firstGap=randomInt(3,9),gapGrowth=randomInt(2,5);
+    const sequence=[start];let gap=firstGap;
+    for(let index=0;index<5;index+=1){sequence.push(sequence[sequence.length-1]+gap);gap+=gapGrowth}
+    const answer=sequence[sequence.length-1]+gap;
+    const choices=new Set<number>([answer]);
+    const offsets=[gapGrowth,gapGrowth*2,firstGap+gapGrowth,firstGap*2];
+    while(choices.size<4){const offset=offsets[randomInt(0,offsets.length)];choices.add(Math.max(1,answer+(randomInt(0,2)?offset:-offset)))}
+    const options=shuffle(Array.from(choices));
+    return {sequence,options,answer,puzzle:{
+      type,title:'Pattern Vault',prompt:'Study the progression and identify the next value.',
+      instructions:'The gap changes by a constant amount each time. Calculate the differences before choosing.',
+      display:sequence.join('   ·   ')+'   ·     ?',choices:options.map(String),
+      explanation:'The gap increases by '+gapGrowth+' each step. The final gap is '+gap+'.'
+    }};
   }
-  const answer = sequence[sequence.length - 1] + gap;
-  const choices = new Set<number>([answer]);
-  const offsets = [gapGrowth, gapGrowth * 2, firstGap + gapGrowth, firstGap * 2];
-  while (choices.size < 4) {
-    const offset = offsets[randomInt(0, offsets.length)];
-    choices.add(Math.max(1, answer + (randomInt(0, 2) ? offset : -offset)));
+  if(type==='matrix-master'){
+    const base=randomInt(4,16),vertical=randomInt(4,9),verticalGrowth=randomInt(1,3),horizontal=randomInt(2,6),horizontalGrowth=randomInt(1,2);
+    const value=(r:number,c:number)=>base+r*vertical+(r*(r-1)/2)*verticalGrowth+c*horizontal+(c*(c-1)/2)*horizontalGrowth;
+    const answer=value(2,2);
+    const grid=Array.from({length:3},(_,r)=>Array.from({length:3},(_,c)=>r===2&&c===2?'?':String(value(r,c))));
+    return makeIndexedPuzzle(type,{
+      type,title:'Matrix Master',prompt:'Complete the missing corner of the number matrix.',
+      instructions:'Moving right, the horizontal step increases by '+horizontalGrowth+'. Moving down, the vertical step increases by '+verticalGrowth+'. Work both patterns together.',
+      display:'Complete the final square.',grid,
+      clues:['Across: first step '+horizontal+', then +'+(horizontal+horizontalGrowth)+'.','Down: first step '+vertical+', then +'+(vertical+verticalGrowth)+'.'],
+      explanation:'The missing value is '+answer+'. Both horizontal and vertical increments grow on the second step.'
+    },answer,[answer,answer+horizontalGrowth+2,answer-vertical,answer+verticalGrowth+horizontal]);
   }
-  const options = Array.from(choices);
-  for (let index = options.length - 1; index > 0; index -= 1) {
-    const swap = randomInt(0, index + 1);
-    [options[index], options[swap]] = [options[swap], options[index]];
+  if(type==='cipher-breaker'){
+    const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ',start=randomInt(0,26),jumps=[3,5,7,9,11];
+    let value=start;const letters=[alphabet[value]];
+    for(let i=0;i<4;i+=1){value=(value+jumps[i])%26;letters.push(alphabet[value])}
+    const answer=alphabet[(value+jumps[4])%26];
+    const distractors=[1,2,4].map(offset=>alphabet[(alphabet.indexOf(answer)+offset)%26]);
+    return makeIndexedPuzzle(type,{
+      type,title:'Cipher Breaker',prompt:'Decrypt the next character in the sequence.',
+      instructions:'Treat A as 0 and Z as 25. Each forward jump is an odd number and grows by two each time. The alphabet wraps after Z.',
+      display:letters.join('   ·   ')+'   ·     ?',
+      clues:['Decode the shift pattern.','Remember: Z wraps back to A.'],
+      explanation:'The shifts are +3, +5, +7, +9 and +11. The next character is '+answer+'.'
+    },answer,[answer,...distractors]);
   }
-  return { sequence, options, answer };
+  if(type==='prime-labyrinth'){
+    const primes=[2,3,5,7,11,13,17,19,23,29,31,37],offset=randomInt(0,6);
+    const pairs=Array.from({length:4},(_,i)=>primes[offset+i]*primes[offset+i+1]);
+    const answer=primes[offset+4]*primes[offset+5];
+    return makeIndexedPuzzle(type,{
+      type,title:'Prime Labyrinth',prompt:'Find the next product in the prime-number chain.',
+      instructions:'Each term is the product of two consecutive prime numbers. The second factor of one term becomes the first factor of the next.',
+      display:pairs.join('   ·   ')+'   ·     ?',
+      clues:['Find the consecutive prime factors.','Each pair overlaps with the next pair.'],
+      explanation:'The prime chain continues with '+primes[offset+4]+' × '+primes[offset+5]+' = '+answer+'.'
+    },answer,[answer,answer+2,answer-2,answer+primes[offset+4]]);
+  }
+  if(type==='logic-lock'){
+    const tens=randomInt(2,6),hundreds=tens+4,units=tens+1;
+    const answer=hundreds*100+tens*10+units,sum=hundreds+tens+units;
+    const candidates=[answer,units*100+hundreds*10+tens,hundreds*100+units*10+tens,(hundreds-1)*100+tens*10+(units+1)];
+    const unique=Array.from(new Set(candidates.map(String)));
+    while(unique.length<4)unique.push(String(answer+unique.length*11));
+    return makeIndexedPuzzle(type,{
+      type,title:'Logic Lock',prompt:'Crack the three-digit vault code using all four clues.',
+      instructions:'The digits are distinct and none is zero. The hundreds digit is four greater than the tens digit. The units digit is one greater than the tens digit. All three digits add up to '+sum+'.',
+      display:'?  ?  ?',
+      clues:['Three different digits; no zero.','Hundreds = tens + 4.','Units = tens + 1.','Digit sum = '+sum+'.'],
+      explanation:'The tens digit is '+tens+', so the code is '+answer+'.'
+    },answer,unique);
+  }
+  throw new Error('Choose one of the five available games.');
 }
 
 async function getRewardStatus(userId: string) {
@@ -85,13 +146,15 @@ export async function GET(req: Request) {
     await ensureLoyaltySchema(pool);
     await ensureGameSchema();
     const status = await getRewardStatus(user.id);
+    const requestedType = new URL(req.url).searchParams.get('type') || 'pattern-vault';
+    const gameType = GAME_TYPES.has(requestedType) ? requestedType : 'pattern-vault';
     if (status.rewarded) {
-      return NextResponse.json({ rewardedToday: true, rewardKobo: status.rewardKobo, attemptsLeft: Math.max(0, MAX_ATTEMPTS_PER_DAY - status.attempts) }, { headers: { 'cache-control': 'no-store' } });
+      return NextResponse.json({ rewardedToday: true, gameType, rewardKobo: status.rewardKobo, attemptsLeft: Math.max(0, MAX_ATTEMPTS_PER_DAY - status.attempts) }, { headers: { 'cache-control': 'no-store' } });
     }
     if (status.attempts >= MAX_ATTEMPTS_PER_DAY) {
       return NextResponse.json({ error: 'You have used all three attempts for today. Come back tomorrow.', attemptsLeft: 0 }, { status: 429 });
     }
-    const puzzle = makePuzzle();
+    const puzzle = makePuzzle(gameType);
     const attemptId = randomUUID();
     await pool.query(
       `INSERT INTO public.ebnimaam_game_attempts(id,user_id,sequence,options,answer,expires_at)
@@ -100,7 +163,9 @@ export async function GET(req: Request) {
     );
     return NextResponse.json({
       attemptId,
-      sequence: puzzle.sequence,
+      gameType,
+      puzzle: puzzle.puzzle,
+      sequence: Array.isArray(puzzle.sequence) ? puzzle.sequence : [],
       options: puzzle.options,
       rewardKobo: status.rewardKobo,
       attemptsLeft: MAX_ATTEMPTS_PER_DAY - status.attempts - 1,
@@ -129,7 +194,7 @@ export async function POST(req: Request) {
   try {
     await client.query('BEGIN');
     const found = await client.query(
-      'SELECT id,options,answer,expires_at,completed_at FROM public.ebnimaam_game_attempts WHERE id=$1 AND user_id=$2 FOR UPDATE',
+      'SELECT id,sequence,options,answer,expires_at,completed_at FROM public.ebnimaam_game_attempts WHERE id=$1 AND user_id=$2 FOR UPDATE',
       [attemptId, user.id],
     );
     if (!found.rowCount) throw new Error('This challenge was not found. Start a new one.');
@@ -163,8 +228,8 @@ export async function POST(req: Request) {
           direction: 'credit',
           amountKobo: rewardKobo,
           reference: 'game-reward-' + String(day.rows[0]?.day_key || 'today') + '-' + user.id,
-          description: 'Daily Pattern Challenge reward',
-          metadata: { attemptId, game: 'daily-pattern-challenge', storeOnly: true },
+          description: 'Daily Ebnimaam Mind Arena reward',
+          metadata: { attemptId, game: (attempt.sequence && !Array.isArray(attempt.sequence) ? String(attempt.sequence.type||'pattern-vault') : 'pattern-vault'), storeOnly: true },
         });
       } else if (alreadyRewarded) {
         rewardKobo = 0;
@@ -175,9 +240,14 @@ export async function POST(req: Request) {
       [correct ? 'won' : 'miss', attemptId],
     );
     await client.query('COMMIT');
+    const storedPuzzle = attempt.sequence && !Array.isArray(attempt.sequence) ? attempt.sequence.puzzle : null;
+    const answerIndex = Number(attempt.answer);
+    const answerLabel = Array.isArray(storedPuzzle?.choices) ? storedPuzzle.choices[answerIndex] : answerIndex;
     return NextResponse.json({
       correct,
-      answer: Number(attempt.answer),
+      answer: answerIndex,
+      answerLabel,
+      explanation: String(storedPuzzle?.explanation||''),
       rewardKobo,
       alreadyRewarded,
       message: correct ? 'Correct answer.' : 'Not quite. Try another challenge.',
