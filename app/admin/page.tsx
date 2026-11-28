@@ -54,6 +54,12 @@ async function compressNewsImage(file: File): Promise<string> {
 }
 
 export default function Admin(){
+ const [settingsEditingGroup,setSettingsEditingGroup]=useState<string|null>(null);
+ const [adminCurrentPassword,setAdminCurrentPassword]=useState('');
+ const [adminNewPassword,setAdminNewPassword]=useState('');
+ const [adminConfirmPassword,setAdminConfirmPassword]=useState('');
+ const [rewardsPaidKobo,setRewardsPaidKobo]=useState(0);
+ const [pushState,setPushState]=useState<any>({configured:false,subscribed:false});
  const [pass,setPass]=useState(''),[ok,setOk]=useState(false),[err,setErr]=useState(''),[orders,setOrders]=useState<any[]>([]),[customers,setCustomers]=useState<any[]>([]),[activity,setActivity]=useState<any[]>([]),[emailConfigured,setEmailConfigured]=useState(false),[stockMovements,setStockMovements]=useState<any[]>([]),[stockAdjustment,setStockAdjustment]=useState<any>({productId:'',variant:'',delta:'',reason:''}),[supportTickets,setSupportTickets]=useState<any[]>([]),[productQuestions,setProductQuestions]=useState<any[]>([]),[reportedReviews,setReportedReviews]=useState<any[]>([]),[supportReplyDrafts,setSupportReplyDrafts]=useState<Record<string,string>>({}),[questionAnswerDrafts,setQuestionAnswerDrafts]=useState<Record<string,string>>({}),[products,setProducts]=useState<any[]>([]),[news,setNews]=useState<any[]>([]),[newsEditing,setNewsEditing]=useState<any>(null),[editing,setEditing]=useState<any>(null),[search,setSearch]=useState(''),[paymentFilter,setPaymentFilter]=useState('all'),[fulfilFilter,setFulfilFilter]=useState('all'),[settings,setSettings]=useState<any>({pickupAddress:'',pickupAddressConfirmed:false,pickupHours:'',holidayExceptions:'',deliveryRules:'',supportEmail:'',supportPhone:'',socialLinks:{instagram:'',facebook:'',tiktok:'',youtube:'',x:'',whatsappChannel:'https://whatsapp.com/channel/0029Vb7JXDL0VycOVg5oBv0N'},returnsPolicy:'',privacyPolicy:'',terms:'',shippingPolicy:'',lowStockThreshold:3,deliveryFeesByState:{},deliveryFeesConfirmed:false});
  async function loadProducts(){const r=await fetch('/api/products');const d=await r.json();setProducts(d.products||[])}
  async function loadNews(){const r=await fetch('/api/news');const d=await r.json();setNews(d.news||[])}
@@ -77,7 +83,33 @@ export default function Admin(){
   setErr('Stock adjustment saved and recorded in the inventory movement ledger.');
   await Promise.allSettled([loadProducts(),loadStockMovements()]);
  }
- async function saveSettings(e:any){e.preventDefault();const r=await fetch('/api/store-settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});if(r.ok)setErr('Store settings saved. Nigeria-only delivery is enforced.');else{const d=await r.json().catch(()=>({}));setErr(d.error||'Could not save store settings.')}}
+ async function saveSettings(e:any,group:string){e.preventDefault();const r=await fetch('/api/store-settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});if(r.ok){setSettingsEditingGroup(null);setErr(group+' settings saved.');await loadSettings()}else{const d=await r.json().catch(()=>({}));setErr(d.error||'Could not save store settings.')}}
+ async function changeAdminPassword(e:any){
+  e.preventDefault();setErr('');
+  if(adminNewPassword!==adminConfirmPassword){setErr('The new administrator passwords do not match.');return}
+  if(adminNewPassword.length<14||!/[a-z]/.test(adminNewPassword)||!/[A-Z]/.test(adminNewPassword)||!/[0-9]/.test(adminNewPassword)||!/[^A-Za-z0-9]/.test(adminNewPassword)){setErr('Use at least 14 characters with uppercase, lowercase, a number and a symbol.');return}
+  const response=await fetch('/api/admin',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'change_admin_password',currentPassword:adminCurrentPassword,newPassword:adminNewPassword})});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok){setErr(data.error||'Administrator password could not be changed.');return}
+  setPass('');setAdminCurrentPassword('');setAdminNewPassword('');setAdminConfirmPassword('');setOk(false);
+  setErr('Administrator password changed. Sign in again using the new password.');
+ }
+ function base64UrlBytes(value:string){const padded=value.replace(/-/g,'+').replace(/_/g,'/');const raw=atob(padded+'='.repeat((4-padded.length%4)%4));return Uint8Array.from(raw,c=>c.charCodeAt(0))}
+ async function enableAdminPush(){
+  try{
+   if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){setErr('This browser does not support push notifications.');return}
+   const status=await fetch('/api/push',{cache:'no-store'});const config=await status.json().catch(()=>({}));
+   if(!status.ok||!config.configured||!config.publicKey){setPushState(config);setErr(config.message||'Push notifications need VAPID keys in the secure hosting environment.');return}
+   const permission=await Notification.requestPermission();
+   if(permission!=='granted'){setErr('Notification permission was not granted. You can enable it in your browser settings.');return}
+   const registration=await navigator.serviceWorker.ready;
+   const subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:base64UrlBytes(config.publicKey)});
+   const saved=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subscription:subscription.toJSON()})});
+   const data=await saved.json().catch(()=>({}));
+   if(!saved.ok)throw new Error(data.error||'Could not save this notification subscription.');
+   setPushState({configured:true,subscribed:true});setErr('Notifications are enabled for this admin device.');
+  }catch(error:any){setErr(error?.message||'Push notifications could not be enabled.')}
+ }
  async function saveNews(e:any){
   e.preventDefault();
   try{
@@ -115,12 +147,14 @@ export default function Admin(){
   if(response.ok)await loadNews();
   else setErr(data.error||'News delete failed.');
  }
- async function load(silent=false){try{const r=await fetch('/api/admin',{cache:'no-store'});if(!r.ok){setOk(false);if(!silent)setErr('Session expired. Sign in again.');return}const d=await r.json();setOrders(d.orders||[]);setCustomers(d.customers||[]);setActivity(d.activity||[]);setEmailConfigured(d.email_configured===true);setOk(true);await Promise.allSettled([loadProducts(),loadNews(),loadSettings(),loadSupportTickets(),loadProductQuestions(),loadReportedReviews(),loadStockMovements()])}catch{setOk(false);if(!silent)setErr('Could not restore the administrator session. Please try signing in again.')}}useEffect(()=>{void load(true);const refresh=window.setInterval(()=>void load(true),60000);return ()=>window.clearInterval(refresh)},[]);
+ async function load(silent=false){try{const r=await fetch('/api/admin',{cache:'no-store'});if(!r.ok){setOk(false);if(!silent)setErr('Session expired. Sign in again.');return}const d=await r.json();setOrders(d.orders||[]);setCustomers(d.customers||[]);setActivity(d.activity||[]);setRewardsPaidKobo(Number(d.rewards_paid_kobo||0));setEmailConfigured(d.email_configured===true);setOk(true);await Promise.allSettled([loadProducts(),loadNews(),loadSettings(),loadSupportTickets(),loadProductQuestions(),loadReportedReviews(),loadStockMovements()])}catch{setOk(false);if(!silent)setErr('Could not restore the administrator session. Please try signing in again.')}}useEffect(()=>{void load(true);const refresh=window.setInterval(()=>void load(true),60000);return ()=>window.clearInterval(refresh)},[]);
  function exportCustomers(){const columns=['email','name','phone','order_count','paid_order_count','paid_total_kobo','last_order_at'];const cell=(value:any)=>{let text=String(value??'');if(/^[=+\-@]/.test(text))text="'"+text;return '"'+text.replace(/"/g,'""')+'"'};const csv=[columns.join(','),...customers.map(row=>columns.map(key=>cell(row[key])).join(','))].join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='ebnimaam-customers.csv';link.click();URL.revokeObjectURL(url)}
  async function exportWebsitePdf(){try{setErr('');const response=await fetch('/api/admin/export',{cache:'no-store'});if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error||'The website information could not be exported.')}const blob=await response.blob();if(!blob.size)throw new Error('The export is empty.');const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='ebnimaam-website-information.pdf';document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),1500);setErr('Full website information downloaded as PDF.')}catch(error:any){setErr(error?.message||'The website information could not be exported.')}}
  async function saveProduct(e:any){e.preventDefault();try{setErr('');let image=editing.image;if(editing.file){image=await new Promise((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(fr.result);fr.onerror=reject;fr.readAsDataURL(editing.file)})}const gallery=String(editing.galleryText||'').split(/\r?\n/).map((value:string)=>value.trim()).filter(Boolean);const size_stock=JSON.parse(String(editing.sizeStockText||'{}'));const product_details=JSON.parse(String(editing.productDetailsText||'{}'));if(!size_stock||typeof size_stock!=='object'||Array.isArray(size_stock)||!product_details||typeof product_details!=='object'||Array.isArray(product_details))throw new Error('Stock and product details must be valid JSON objects.');const p={...editing,image,gallery,size_stock,product_details,sizes:Array.isArray(editing.sizes)?editing.sizes:[],file:undefined};delete p.file;delete p.galleryText;delete p.sizeStockText;delete p.productDetailsText;const r=await fetch('/api/products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});const d=await r.json();if(!r.ok)throw new Error(d.error||'Product save failed');setEditing(null);await loadProducts()}catch(e:any){setErr(e.message||'Product save failed')}}
  const filtered=useMemo(()=>orders.filter(o=>{const q=search.toLowerCase();const match=[o.reference,o.customer_name,o.customer_email,o.customer_phone].some(v=>String(v||'').toLowerCase().includes(q));return match&&(paymentFilter==='all'||String(o.status||'').toLowerCase()===paymentFilter)&&(fulfilFilter==='all'||String(o.fulfilment_status||'processing').toLowerCase()===fulfilFilter)}),[orders,search,paymentFilter,fulfilFilter]);
  const paid=orders.filter(o=>['paid','success','successful'].includes(String(o.status||'').toLowerCase()));const revenue=paid.reduce((a,o)=>a+Number(o.amount_kobo||0),0);
+ const recentOrders=orders.slice().sort((a,b)=>new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime()).slice(0,4);
+ const rewardPaidNaira=Number(rewardsPaidKobo||0)/100;
  const salesByDay=useMemo(()=>{
   const today=new Date();today.setHours(0,0,0,0);
   return Array.from({length:7},(_,index)=>{
@@ -243,6 +277,34 @@ main.admin-login .admin-content>form:not(.editform){border-radius:18px;padding:2
 @media(max-width:900px){main.admin-dashboard{display:grid;grid-template-columns:205px minmax(0,1fr);grid-template-rows:auto 1fr;gap:0}.admin-header{grid-column:1;grid-row:1;min-height:172px;padding:19px 14px}.admin-brand-lockup{font-size:22px;margin-bottom:18px}.admin-nav{grid-column:1;grid-row:2;height:calc(100vh - 172px);min-height:420px}.admin-content{grid-column:2;grid-row:1/span 2;padding:20px 15px}.admin-overview-panels{grid-template-columns:1fr}.admin-header-links{display:none}}
 @media(max-width:640px){main.admin-dashboard{display:flex;flex-direction:column;min-height:100vh}.admin-header{position:relative;width:100%;min-height:auto;padding:15px 17px;border-right:0;border-bottom:1px solid #c99550}.admin-brand-lockup{font-size:22px;margin-bottom:10px}.admin-brand-lockup img{width:37px;height:37px}.admin-brand-row{margin-bottom:7px}.admin-secure{display:none}.admin-header h1{font-size:14px;margin:5px 0}.admin-intro{font-size:10px}.admin-nav{position:sticky;top:0;z-index:30;width:100%;height:auto;min-height:0;display:flex;flex-direction:row;overflow-x:auto;overflow-y:hidden;white-space:nowrap;padding:8px 10px;border-right:0;border-bottom:1px solid #c99550}.admin-nav .nav-label{display:none}.admin-nav a{flex:0 0 auto;min-height:36px;padding:8px 10px;font-size:11px}.admin-content{width:100%;min-height:0;padding:16px 12px 24px}.admin-topbar{align-items:flex-start;flex-direction:column;margin-bottom:17px}.admin-topbar h2{font-size:25px}.admin-live{font-size:10px}.stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.stat{padding:13px}.stat strong{font-size:19px}.admin-chart-card,.admin-referral-card{padding:15px}}
 @media(prefers-reduced-motion:reduce){.admin-nav a,button{transition:none}}
+.admin-lower-panels{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(250px,1fr);gap:14px;margin:0 0 22px}
+.admin-summary-card{border:1px solid #e8e1d7;border-radius:16px;background:#fffefa;box-shadow:0 8px 25px #17263c09;overflow:hidden;min-width:0}
+.admin-summary-head{padding:15px 17px;border-bottom:1px solid #ece6dc;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.admin-summary-head h3{font-size:16px;margin:0;color:#102544}
+.admin-summary-head a{font-size:10px;color:#8a6128;text-decoration:none;font-weight:800}
+.admin-summary-table{width:100%;border-collapse:collapse}
+.admin-summary-table th,.admin-summary-table td{padding:10px 12px;text-align:left;border-bottom:1px solid #f0ece5;font-size:10px;white-space:nowrap}
+.admin-summary-table th{background:#f8f6f1;color:#728092;font-weight:800}
+.admin-summary-table td{color:#28364b}
+.admin-order-status{display:inline-flex;border-radius:999px;background:#e7f4e8;color:#19663a;padding:4px 8px;font-weight:800}
+.admin-inventory-alert{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f0ece5;gap:8px;font-size:11px}
+.admin-inventory-alert b{color:#182b46}
+.admin-inventory-alert span{color:#b43b31;font-size:10px;font-weight:800}
+.admin-task-card{border:1px solid #e8e0d4;background:#fffefa;border-radius:14px;padding:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;box-shadow:0 7px 22px #071a3108;margin:12px 0}
+.admin-task-card h3{margin:0 0 4px;color:#0b2340;font-size:14px}
+.admin-task-card p{margin:0;font-size:11px;color:#798392}
+.admin-task-card button{white-space:nowrap}
+.admin-task-form{margin:0 0 18px;padding:18px;border:1px solid #e5d8c1;border-radius:14px;background:#fffcf6}
+.admin-task-form h3{margin:0 0 12px}
+.admin-setting-status{display:inline-flex;align-items:center;gap:6px;font-size:10px;color:#1c713c;font-weight:800}
+.admin-setting-status:before{content:"";width:7px;height:7px;border-radius:50%;background:#25a256}
+.admin-security-card{background:linear-gradient(145deg,#0a203a,#102d4d);color:white;border:1px solid #c99550;border-radius:16px;padding:18px;margin:12px 0}
+.admin-security-card h3{color:#f1c46d;margin-top:0}
+.admin-security-card p{color:#dae2ec;font-size:11px}
+.admin-nav a{display:flex;align-items:center;gap:10px}
+.admin-nav a .nav-icon{width:20px;text-align:center;color:#e5b85a}
+@media(max-width:900px){.admin-lower-panels{grid-template-columns:1fr}}
+@media(max-width:640px){.admin-task-card{align-items:flex-start;flex-direction:column}.admin-task-card button{width:100%}.admin-summary-table th,.admin-summary-table td{font-size:9px;padding:8px 6px}}
 `;
  return <main className={ok?'admin-dashboard':'admin-login'}><style>{css}</style><header className="admin-header"><a className="admin-brand-lockup" href="/store.html"><img src="/assets/icon-512.png" alt="Ebnimaam logo"/><span>ebnimaam</span></a><div className="admin-brand-row"><span className="admin-eyebrow">OWNER WORKSPACE</span><br/><span className="admin-secure">Secure administration</span></div><h1>Control centre</h1><p className="admin-intro">One workspace for your storefront, orders, stock, customers and store content.</p><div className="admin-header-links"><a href="/store.html">Open storefront ↗</a><a href="/admin/loyalty">Rewards & referrals</a><a href="/admin/coupons">Coupons</a><a href="/privacy.html">Privacy</a><a href="/returns.html">Returns</a><a href="/terms.html">Terms</a></div></header>{ok&&<nav className="admin-nav" aria-label="Admin sections"><span className="nav-label">Workspace</span><a className="primary" href="#overview">Overview</a><a href="#inventory">Inventory alerts</a><a href="#stock-history">Stock movements</a><a href="#orders">Orders</a><a href="#products">Products</a><a href="#customers">Customers</a><a href="#support">Customer support</a><a href="#settings">Store settings</a><a href="#activity">Admin activity</a><a href="#content">Website news</a><span className="nav-label">Store tools</span><a href="/admin/loyalty">Rewards & referrals</a><a href="/admin/coupons">Coupons & promotions</a></nav>}<div className="admin-content">{!ok?<form onSubmit={async e=>{e.preventDefault();setErr('');const r=await fetch('/api/admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})});if(r.ok)load();else setErr('Login failed.')}}><h2>Administrator sign in</h2><label>Admin password<input type="password" value={pass} onChange={e=>setPass(e.target.value)} required/></label><button>Sign in</button>{err&&<p role="alert">{err}</p>}</form>:<><div className="admin-topbar"><div><h2>Welcome back</h2><p>Here is what is happening with your store today.</p></div><span className="admin-live">Online store active</span></div><div className="stats" id="overview"><div className="stat">Total sales<strong>₦{(revenue/100).toLocaleString()}</strong></div><div className="stat">Total orders<strong>{orders.length}</strong></div><div className="stat">Customers<strong>{customers.length}</strong></div><div className="stat">Published products<strong>{products.filter(product=>product.is_active===true).length}</strong></div></div><div className="admin-overview-panels">
  <section className="admin-chart-card">
