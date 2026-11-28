@@ -139,7 +139,7 @@
    try{
     const response=await fetch('/api/game',{credentials:'same-origin',cache:'no-store'}),data=await response.json().catch(()=>({}));
     if(!response.ok)throw new Error(data.error||'The daily challenge is unavailable.');
-    if(data.rewardedToday){$('gameRank').textContent='DAILY REWARD CLAIMED';$('gameRewardText').textContent='You have already earned today’s game reward. Your store credit is ready to use at checkout.';$('gameStatus').textContent='The academy is closed for today. Return tomorrow for another reward.';$('gameStart').textContent='Come back tomorrow';$('gameStart').disabled=true;return}
+    if(data.completedAll){$('gameRank').textContent='SHADOW MASTER';$('gameRewardText').textContent='All three trials have been cleared. Your daily reward status is settled.';$('gameStatus').textContent='The academy recognises you as a Shadow Master. Return tomorrow to begin again.';$('gameStart').textContent='Trials completed';$('gameStart').disabled=true;return}
     activeGame=data;activeStageName=String(data.stageName||'Genin Trial');
     $('gameRank').textContent=activeStageName.toUpperCase();
     $('gameOpponent').textContent=String(data.opponent||'Your rival awaits.');
@@ -147,7 +147,7 @@
     $('gameOpponentAvatar').textContent=data.stage===3?'影':data.stage===2?'狐':'忍';
     document.querySelectorAll('.anime-stage').forEach((node,index)=>node.classList.toggle('active',index===Number(data.stage||1)-1));
     $('gameSequence').textContent=(data.sequence||[]).join('   ·   ')+'   ·   ?';
-    $('gameRewardText').textContent='Correct answer reward: '+money(data.rewardKobo)+' store credit. Attempts remaining after this trial: '+Number(data.attemptsLeft||0)+'.';
+    $('gameRewardText').textContent=(data.alreadyRewardedToday?'Daily reward already claimed. Complete the remaining trials for your Shadow Master rank.':'First correct answer reward: '+money(data.rewardKobo)+' store credit.')+' Attempts remaining after this trial: '+Number(data.attemptsLeft||0)+'.';
     $('gameStatus').textContent='Mission accepted. Study the number seal carefully. One answer, no hints.';
     $('gameOptions').innerHTML=(data.options||[]).map((value,index)=>'<button type="button" data-game-answer="'+Number(value)+'" aria-label="Option '+(index+1)+': '+Number(value)+'">'+Number(value)+'</button>').join('');
     $('gameStart').textContent='Trial in progress';
@@ -163,15 +163,16 @@
     const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'The answer could not be checked.');
     activeGame=null;$('gameSequence').textContent='';
     if(data.correct){
-     $('gameRank').textContent='TRIAL CLEARED';
-     $('gameStatus').textContent=data.rewardKobo>0?'Victory. '+activeStageName+' cleared. '+money(data.rewardKobo)+' has been added to your store-only Ebnimaam balance.':(data.alreadyRewarded?'Victory. The daily reward has already been claimed.':'Victory. Your answer is correct.');
-     $('gameStart').textContent='Start next trial';
-     $('gameStart').disabled=Number(data.stage||0)>=3;
-     if(Number(data.stage||0)>=3)$('gameStatus').textContent+=' You have completed all three ranks for today.';
+     $('gameRank').textContent=data.completedAll?'SHADOW MASTER':'TRIAL CLEARED';
+     $('gameStatus').textContent=data.rewardKobo>0?'Victory. '+activeStageName+' cleared. '+money(data.rewardKobo)+' has been added to your store-only Ebnimaam balance.':(data.alreadyRewarded?'Victory. '+activeStageName+' cleared. Your daily reward was already claimed.':'Victory. '+activeStageName+' cleared.');
+     $('gameStart').textContent=data.completedAll?'Trials completed':'Start next rank';
+     $('gameStart').disabled=data.completedAll||Number(data.attemptsLeft||0)<=0;
+     if(data.completedAll)$('gameStatus').textContent+=' You have completed all three ranks for today.';
+     else if(Number(data.attemptsLeft||0)<=0)$('gameStatus').textContent+=' Your daily attempts are finished; return tomorrow to continue.';
     } else {
      $('gameRank').textContent='TRIAL FAILED';
      $('gameStatus').textContent='The seal was not solved. The correct answer was '+Number(data.answer)+'. Start another trial while today’s attempts remain.';
-     $('gameStart').textContent='Retry the trial';
+     $('gameStart').textContent=Number(data.attemptsLeft||0)>0?'Retry this rank':'Daily attempts complete';
      $('gameStart').disabled=Number(data.attemptsLeft||0)<=0;
     }
     $('gameOptions').innerHTML='';await load();
