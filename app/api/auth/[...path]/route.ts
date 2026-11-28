@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { checkRateLimit, consumeOneTimeChallenge } from '../../../../lib/rate-limit';
-import { activateCustomerSession, clearCustomerSessionCookies, hasCustomerSession, isCurrentCustomerSession, revokeCustomerSession } from '../../../../lib/customer-sessions';
+import { activateCustomerSession, clearCustomerSessionCookies, hasCustomerSession, isCurrentCustomerSession, resolveCustomerSessionUser, revokeCustomerSession } from '../../../../lib/customer-sessions';
 export const runtime = 'nodejs';
 const base = (process.env.NEON_AUTH_BASE_URL || 'https://ep-cool-frost-bgh6nunl.neonauth.c-9.eu-central-1.aws.neon.tech/ebnimaam/auth').replace(/\/$/, '');
 const secret = () => process.env.AUTH_SECRET || process.env.BETTER_AUTH_SECRET || process.env.NEON_AUTH_SECRET;
@@ -151,7 +151,17 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
       }
     }
     if (req.method === 'GET' && endpoint === 'get-session' && upstream.ok) {
-      const user = await fetchSignedInUser();
+      const providerUser = await fetchSignedInUser();
+      if (!providerUser?.id || !providerUser?.email || providerUser.emailVerified !== true) {
+        const localUser = await resolveCustomerSessionUser(req);
+        if (localUser && await isCurrentCustomerSession(req, localUser.id)) {
+          return NextResponse.json({
+            user: { id: localUser.id, email: localUser.email, name: localUser.name || '', emailVerified: true },
+            session: { userId: localUser.id, expiresAt: null, activeDeviceOnly: true },
+          }, { headers: { 'cache-control': 'no-store' } });
+        }
+      }
+      const user = providerUser;
       if (user?.id && user?.email && user.emailVerified === true) {
         try {
           if (await hasCustomerSession(String(user.id))) {
