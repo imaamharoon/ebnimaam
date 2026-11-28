@@ -59,7 +59,7 @@ export async function sendPushToOwner(ownerKey: string, notification: { title: s
   try {
     await ensurePushSchema();
     const webPush = (await import('web-push')).default as any;
-    webPush.setVapidDetails(vapidSubject(),vap idPublic(),vapidPrivate());
+    webPush.setVapidDetails(vapidSubject(),vapidPublic(),vapidPrivate());
     const rows = await pool.query('SELECT id,endpoint,p256dh,auth FROM public.ebnimaam_push_subscriptions WHERE owner_key=$1',[ownerKey]);
     let sent = 0;
     await Promise.all(rows.rows.map(async (row:any)=>{
