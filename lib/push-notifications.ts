@@ -10,7 +10,7 @@ export function getPushConfiguration() {
 }
 
 async function ensurePushSchema() {
-  await pool.query(\`CREATE TABLE IF NOT EXISTS public.ebnimaam_push_subscriptions(
+  await pool.query(`CREATE TABLE IF NOT EXISTS public.ebnimaam_push_subscriptions(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_key TEXT NOT NULL,
     endpoint TEXT NOT NULL UNIQUE,
@@ -20,7 +20,7 @@ async function ensurePushSchema() {
     user_agent TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )\`);
+  )`);
   await pool.query('CREATE INDEX IF NOT EXISTS ebnimaam_push_owner_idx ON public.ebnimaam_push_subscriptions(owner_key,updated_at DESC)');
 }
 
@@ -41,10 +41,10 @@ export async function savePushSubscription(ownerKey: string, subscription: any, 
   }
   if (endpoint.length > 4096 || p256dh.length > 500 || auth.length > 500) throw new Error('The notification subscription is too large.');
   await pool.query(
-    \`INSERT INTO public.ebnimaam_push_subscriptions(owner_key,endpoint,p256dh,auth,expiration_time,user_agent)
+    `INSERT INTO public.ebnimaam_push_subscriptions(owner_key,endpoint,p256dh,auth,expiration_time,user_agent)
      VALUES($1,$2,$3,$4,$5,$6)
      ON CONFLICT(endpoint) DO UPDATE SET owner_key=EXCLUDED.owner_key,p256dh=EXCLUDED.p256dh,auth=EXCLUDED.auth,
-       expiration_time=EXCLUDED.expiration_time,user_agent=EXCLUDED.user_agent,updated_at=NOW()\`,
+       expiration_time=EXCLUDED.expiration_time,user_agent=EXCLUDED.user_agent,updated_at=NOW()`,
     [ownerKey,endpoint,p256dh,auth,subscription.expirationTime==null?null:Number(subscription.expirationTime),String(userAgent).slice(0,240)],
   );
 }
