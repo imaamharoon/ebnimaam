@@ -71,7 +71,7 @@ jobs:
           sha256sum "$APK" > "$APK.sha256"
           printf 'Ebnimaam Android App\\nBuild: %s\\nCommit: %s\\nPackage: com.ebnimaam.store\\n' "$GITHUB_RUN_NUMBER" "$GITHUB_SHA" > android/app/build/outputs/apk/version.txt
       - name: Publish APK download
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: android-apk-${{ github.run_number }}
           name: Ebnimaam Android App ${{ github.run_number }}
