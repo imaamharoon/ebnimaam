@@ -405,3 +405,45 @@ Nigeria-only operations; Paystack-only; authenticated checkout; no Facebook/soci
 - Product rows are locked in a stable product-ID order during reconciliation. Overall stock is decremented once per product and any configured per-size stock is decremented by the corresponding aggregated quantity in the same database transaction.
 - When a product, overall quantity or tracked size quantity cannot be confirmed, inventory is not decremented and the paid order is marked for owner stock review. The reconciliation remains idempotent for an already-paid order.
 - This is a source-code correction only. It does not edit existing orders, products, customer records, Paystack settings or payment history. A preview build and candidate-deployment verification are required before release.
+## 28. Full premium storefront, owner workspace, AI, game and security — 28 November 2026
+
+### Reference-led storefront and first visit
+- The storefront has a navy, gold and warm-cream visual system adapted from the supplied reference: animated brand reveal, premium fashion hero, prominent search, category shortcuts, live-catalogue product cards, rewards promotion and fixed mobile Home / Categories / Deals / Rewards / Account navigation.
+- First-time browser visitors see the logo reveal and are then routed to the verified account-creation flow. The introduction is remembered on that browser so returning visitors are not forced through signup on every visit. A returning customer can sign in instead.
+- Category shortcuts filter the existing catalogue. They must not invent products, stock, photos or prices.
+- The owner dashboard has a dark navy/gold desktop sidebar, a compact mobile section bar, actual paid-sales metrics, a 30-day sales overview, recent order cards, inventory alerts and a separate workspace for orders, products, customers, support, shipping fees, store settings, rewards, content and security.
+
+### Admin settings and owner protection
+- Saved social links, support contacts and policy content are presented as saved/configured summaries with an Edit action. Their actual values/text are shown only while the corresponding editor is open.
+- Shipping prices, pickup details and low-stock alert threshold each have their own focused edit task. The Nigeria-only delivery-fee validation and confirmation gates remain active.
+- Product deletion is disabled at the API layer and the product list no longer exposes a Hide/Delete action. Owners can still edit a product and unpublish it; the historical product record is retained.
+- Administrator passwords are checked using a salted scrypt hash stored in the database after the first successful login. The owner can change the password after confirming the current password; a change signs the current browser out. The existing server-side session-signing key remains stable so other protected admin endpoints continue to verify the cookie.
+- This does not remove the need for a strong, private ADMIN_PASSWORD/AUTH_SECRET, protected Vercel access, HTTPS, and owner-side account recovery practices. No admin login bypass is permitted.
+
+### Passkeys and one-device account security
+- A WebAuthn passkey endpoint supports device-bound platform authenticators with user verification. The account page exposes passkey registration, passkey sign-in and saved-passkey removal. Compatible phones/browsers may provide Face ID, fingerprint or the device screen lock; the feature must not be described as universally available.
+- Passkey sign-in activates the same central customer-session record used by password/OTP sign-in. The one-active-device-per-customer rule remains in force. The passkey is an alternative proof of identity, not a second parallel session system.
+- Existing password sign-in, verified-email OTP, password reset and the existing two-minute account-registration retry cooldown are preserved.
+- The runtime is pinned to Node.js 22.x for the current SimpleWebAuthn server package requirement. Device-level passkey acceptance testing is still required on supported Android and iOS browsers.
+
+### Website and app notifications
+- Authenticated customer and admin push subscriptions are stored separately; the service worker now displays push notifications and opens same-origin notification links.
+- Confirmed Paystack payments notify the owner, and order fulfilment status changes notify the owner and the customer when their device has a valid subscription.
+- Push is not considered live until VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT are set as secure Vercel environment variables, a browser/device grants permission, and real notification delivery is tested. The UI reports the unconfigured state rather than pretending alerts are active.
+- These are web-push/PWA notifications. Native APK push integration still needs to be validated against the installed Android build.
+
+### Website-wide Ebnimaam AI
+- The chat backend now supplies live product details and stock, saved store configuration, delivery fees, published policies, current coupons, active challenges, news, published product questions/reviews and only the signed-in customer's own orders, wallet/referral progress and support history.
+- The assistant's scope covers catalogue discovery, sizing, cart, verified account and device security, passkeys, checkout/Paystack, delivery/pickup, order tracking, returns/refunds, rewards, the game, coupons, app installation, notifications, policies and customer support.
+- It remains read-only. It cannot change orders, issue refunds/credits, edit products/settings or reveal admin secrets/customer data.
+- A previous environment check found no GEMINI_API_KEY. Without that key, the endpoint can answer the deterministic website guide questions but cannot provide open-ended generative answers to every new question. Configure GEMINI_API_KEY on Vercel to activate the broader Gemini-powered response path; do not reuse a Gmail app password as an AI key.
+
+### Anime-inspired daily game
+- The Daily Pattern Challenge is now styled as the Ebnimaam Shadow Trials with three ranks: Genin, Chunin and Shadow Boss. Later ranks use more complex interleaved and recurrence patterns.
+- Later ranks unlock only after the previous rank is solved. Up to five server-issued attempts are allowed per Africa/Lagos day so the player can retry a difficult rank. The answer, expiry and result remain server-verified.
+- Only one daily game reward is credited to the Ebnimaam store wallet, even when the player clears several ranks. Rewards remain store credit, not cash or transferable funds.
+
+### Release safety and remaining verification
+- The branch changes are isolated from main. No production deployment has been promoted, no product/customer/order/wallet/inventory records have been edited, and Paystack configuration has not been changed.
+- The complete candidate must pass GitHub Actions dependency audit, security smoke check, TypeScript type-check and Next.js production build before it is eligible for review. A live Vercel preview and production alias verification are still required before release.
+- Final acceptance must include: customer signup/OTP and two-minute retry cooldown; passkey registration and sign-in; one-device sign-in invalidating the prior device; admin password rotation and all protected admin sections; product-deletion rejection; saved settings remaining hidden until Edit; push notification delivery after VAPID setup; Paystack payment verification and stock reconciliation; and Android/iOS PWA installation.
