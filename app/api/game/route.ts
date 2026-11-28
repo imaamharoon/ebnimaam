@@ -123,12 +123,14 @@ async function getRewardStatus(userId: string) {
   const result = await pool.query(
     `SELECT
        (SELECT COUNT(*)::int FROM public.ebnimaam_game_attempts WHERE user_id=$1 AND created_at >= ${NIGERIA_DAY_START}) AS attempts,
+       (SELECT COUNT(*)::int FROM public.ebnimaam_game_attempts WHERE user_id=$1 AND created_at >= ${NIGERIA_DAY_START} AND result='won') AS stages_cleared,
        EXISTS(SELECT 1 FROM public.ebnimaam_wallet_ledger WHERE user_id=$1 AND entry_type='game_reward' AND direction='credit' AND created_at >= ${NIGERIA_DAY_START}) AS rewarded,
        (SELECT game_reward_kobo FROM public.ebnimaam_loyalty_settings WHERE id=1) AS reward_kobo`,
     [userId],
   );
   return {
     attempts: Number(result.rows[0]?.attempts || 0),
+    stagesCleared: Number(result.rows[0]?.stages_cleared || 0),
     rewarded: result.rows[0]?.rewarded === true,
     rewardKobo: Number(result.rows[0]?.reward_kobo ?? 5000),
   };
@@ -144,13 +146,13 @@ export async function GET(req: Request) {
     await ensureLoyaltySchema(pool);
     await ensureGameSchema();
     const status = await getRewardStatus(user.id);
-    if (status.rewarded) {
-      return NextResponse.json({ rewardedToday: true, rewardKobo: status.rewardKobo, attemptsLeft: Math.max(0, MAX_ATTEMPTS_PER_DAY - status.attempts) }, { headers: { 'cache-control': 'no-store' } });
+    if (status.stagesCleared >= 3) {
+      return NextResponse.json({ completedAll: true, rewardedToday: status.rewarded, attemptsLeft: Math.max(0, MAX_ATTEMPTS_PER_DAY - status.attempts) }, { headers: { 'cache-control': 'no-store' } });
     }
     if (status.attempts >= MAX_ATTEMPTS_PER_DAY) {
-      return NextResponse.json({ error: 'You have used all three attempts for today. Come back tomorrow.', attemptsLeft: 0 }, { status: 429 });
+      return NextResponse.json({ error: status.stagesCleared ? 'Your daily attempts are complete. Return tomorrow to continue your trials.' : 'You have used all three attempts for today. Come back tomorrow.', attemptsLeft: 0 }, { status: 429 });
     }
-    const stage = Math.min(MAX_ATTEMPTS_PER_DAY,status.attempts+1);
+    const stage = Math.min(3, status.stagesCleared + 1);
     const puzzle = makePuzzle(stage);
     const attemptId = randomUUID();
     await pool.query(
@@ -166,7 +168,8 @@ export async function GET(req: Request) {
       opponent: puzzle.opponent,
       mission: puzzle.mission,
       options: puzzle.options,
-      rewardKobo: status.rewardKobo,
+      rewardKobo: status.rewarded ? 0 : status.rewardKobo,
+      alreadyRewardedToday: status.rewarded,
       attemptsLeft: MAX_ATTEMPTS_PER_DAY - status.attempts - 1,
       expiresInSeconds: 300,
     }, { headers: { 'cache-control': 'no-store' } });
@@ -202,49 +205,16 @@ export async function POST(req: Request) {
     if (new Date(attempt.expires_at).getTime() < Date.now()) {
       await client.query("UPDATE public.ebnimaam_game_attempts SET completed_at=NOW(),result='expired' WHERE id=$1", [attemptId]);
       await client.query('COMMIT');
-      return NextResponse.json({ error: 'This challenge expired. Start a new one.' }, { status: 410 });
-    }
-    const options = Array.isArray(attempt.options) ? attempt.options.map(Number) : [];
-    if (!options.includes(answer)) throw new Error('Choose one of the four displayed answers.');
-    const correct = Number(attempt.answer) === answer;
-    let rewardKobo = 0;
-    let alreadyRewarded = false;
-    if (correct) {
-      const settings = await client.query('SELECT game_reward_kobo FROM public.ebnimaam_loyalty_settings WHERE id=1');
-      const configuredReward = Number(settings.rows[0]?.game_reward_kobo || 0);
-      const priorReward = await client.query(
-        `SELECT 1 FROM public.ebnimaam_wallet_ledger
-         WHERE user_id=$1 AND entry_type='game_reward' AND direction='credit' AND created_at >= ${NIGERIA_DAY_START} LIMIT 1`,
-        [user.id],
-      );
-      alreadyRewarded = Boolean(priorReward.rowCount);
-      if (!alreadyRewarded && configuredReward > 0) {
-        const day = await client.query("SELECT to_char((NOW() AT TIME ZONE 'Africa/Lagos')::date,'YYYYMMDD') AS day_key");
-        rewardKobo = configuredReward;
-        await addWalletEntry(client, {
-          userId: user.id,
-          entryType: 'game_reward',
-          direction: 'credit',
-          amountKobo: rewardKobo,
-          reference: 'game-reward-' + String(day.rows[0]?.day_key || 'today') + '-' + user.id,
-          description: 'Daily Pattern Challenge reward',
-          metadata: { attemptId, game: 'daily-pattern-challenge', storeOnly: true },
-        });
-      } else if (alreadyRewarded) {
-        rewardKobo = 0;
-      }
-    }
-    await client.query(
-      "UPDATE public.ebnimaam_game_attempts SET completed_at=NOW(),result=$1 WHERE id=$2",
-      [correct ? 'won' : 'miss', attemptId],
-    );
-    await client.query('COMMIT');
+    const updatedStatus = await getRewardStatus(user.id);
     return NextResponse.json({
       correct,
       stage: Number(attempt.stage||1),
       answer: Number(attempt.answer),
       rewardKobo,
       alreadyRewarded,
+      stagesCleared: updatedStatus.stagesCleared,
+      attemptsLeft: Math.max(0,MAX_ATTEMPTS_PER_DAY-updatedStatus.attempts),
+      completedAll: updatedStatus.stagesCleared >= 3,
       message: correct ? 'Correct answer.' : 'Not quite. Try another challenge.',
     }, { headers: { 'cache-control': 'no-store' } });
   } catch (error: any) {
