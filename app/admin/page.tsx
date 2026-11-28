@@ -305,6 +305,34 @@ main.admin-login .admin-content>form:not(.editform){border-radius:18px;padding:2
 .admin-nav a .nav-icon{width:20px;text-align:center;color:#e5b85a}
 @media(max-width:900px){.admin-lower-panels{grid-template-columns:1fr}}
 @media(max-width:640px){.admin-task-card{align-items:flex-start;flex-direction:column}.admin-task-card button{width:100%}.admin-summary-table th,.admin-summary-table td{font-size:9px;padding:8px 6px}}
+@media(min-width:901px){
+ main.admin-dashboard{max-width:none;min-height:100vh;margin:0;padding:16px;grid-template-columns:238px minmax(0,1fr);grid-template-rows:auto 1fr;gap:14px}
+ .admin-header{grid-column:1;grid-row:1;padding:18px 16px;border-radius:18px;min-height:94px;position:sticky;top:16px}
+ .admin-header h1,.admin-intro,.admin-header-links,.admin-brand-row{display:none}
+ .admin-brand-lockup{display:flex;align-items:center;margin-bottom:4px}
+ .admin-brand-lockup img{width:42px;height:42px;border-radius:12px;border:1px solid #c99550}
+ .admin-brand-lockup span{font-size:22px;color:#f1c46d}
+ .admin-nav{grid-column:1;grid-row:2;top:124px;min-height:calc(100vh - 154px);background:linear-gradient(150deg,#06172d,#0b2948);border:1px solid #c99550;border-radius:18px;padding:12px}
+ .admin-nav .nav-label{color:#f1c46d}
+ .admin-nav a{color:#edf2f9}
+ .admin-nav a:hover{background:#ffffff12;color:#f5cd77}
+ .admin-nav a.primary{background:linear-gradient(120deg,#f2cb73,#c38b38);color:#0c2039}
+ .admin-content{grid-column:2;grid-row:1 / span 2;padding:12px 16px;background:#faf8f3;border:1px solid #e5d8c5;border-radius:18px;min-height:calc(100vh - 32px)}
+ .admin-topbar{border-bottom:1px solid #e8e0d4;padding-bottom:18px;margin-bottom:18px}
+ .admin-topbar h2{margin-top:0}
+ .stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media(max-width:900px){
+ main.admin-dashboard{display:block;padding:12px}
+ .admin-header{border-radius:14px;margin-bottom:12px;padding:16px}
+ .admin-header h1,.admin-intro,.admin-header-links{display:none}
+ .admin-nav{position:sticky;top:0;z-index:30;display:flex;flex-direction:row;overflow-x:auto;white-space:nowrap;border-radius:13px;background:#071a31;color:#fff;padding:8px;margin-bottom:10px}
+ .admin-nav a{color:#fff}
+ .admin-nav a.primary{background:linear-gradient(120deg,#f2cb73,#c38b38);color:#0c2039}
+ .admin-nav .nav-icon{color:#f1c46d}
+ .admin-content{padding:14px 12px;background:#faf8f3;border-radius:14px}
+ .admin-overview-panels,.admin-lower-panels{grid-template-columns:1fr}
+}
 `;
  return <main className={ok?'admin-dashboard':'admin-login'}><style>{css}</style><header className="admin-header"><a className="admin-brand-lockup" href="/store.html"><img src="/assets/icon-512.png" alt="Ebnimaam logo"/><span>ebnimaam</span></a><div className="admin-brand-row"><span className="admin-eyebrow">OWNER WORKSPACE</span><br/><span className="admin-secure">Secure administration</span></div><h1>Control centre</h1><p className="admin-intro">One workspace for your storefront, orders, stock, customers and store content.</p><div className="admin-header-links"><a href="/store.html">Open storefront ↗</a><a href="/admin/loyalty">Rewards & referrals</a><a href="/admin/coupons">Coupons</a><a href="/privacy.html">Privacy</a><a href="/returns.html">Returns</a><a href="/terms.html">Terms</a></div></header>{ok&&<nav className="admin-nav" aria-label="Admin sections"><span className="nav-label">Store workspace</span><a className="primary" href="#overview"><span className="nav-icon">⌂</span>Overview</a><a href="#orders"><span className="nav-icon">▣</span>Orders</a><a href="#products"><span className="nav-icon">◇</span>Products & stock</a><a href="#customers"><span className="nav-icon">♙</span>Customers</a><a href="#support"><span className="nav-icon">☏</span>Support</a><a href="#shipping-settings"><span className="nav-icon">↗</span>Shipping prices</a><a href="#settings"><span className="nav-icon">⚙</span>Store settings</a><a href="/admin/loyalty"><span className="nav-icon">✧</span>Growth & rewards</a><a href="#security"><span className="nav-icon">♙</span>Security & alerts</a><a href="#content"><span className="nav-icon">▤</span>Store content</a><a href="/admin/coupons"><span className="nav-icon">%</span>Discounts</a></nav>}<div className="admin-content">{!ok?<form onSubmit={async e=>{e.preventDefault();setErr('');const r=await fetch('/api/admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})});if(r.ok)load();else setErr('Login failed.')}}><h2>Administrator sign in</h2><label>Admin password<input type="password" value={pass} onChange={e=>setPass(e.target.value)} required/></label><button>Sign in</button>{err&&<p role="alert">{err}</p>}</form>:<><div className="admin-topbar"><div><h2>Welcome back</h2><p>Here is what is happening with your store today.</p></div><span className="admin-live">Online store active</span></div><div className="stats" id="overview"><div className="stat">Total sales<strong>₦{(revenue/100).toLocaleString()}</strong></div><div className="stat">Total orders<strong>{orders.length}</strong></div><div className="stat">Customers<strong>{customers.length}</strong></div><div className="stat">Rewards paid<strong>₦{rewardPaidNaira.toLocaleString('en-NG',{maximumFractionDigits:0})}</strong></div></div><div className="admin-overview-panels">
  <section className="admin-chart-card">
@@ -364,6 +392,13 @@ main.admin-login .admin-content>form:not(.editform){border-radius:18px;padding:2
   <p className="muted">Checkout stays blocked where a fee has not been configured. A blank fee is not treated as free delivery.</p>
   <label style={{display:'flex',gap:9,alignItems:'flex-start'}}><input type="checkbox" style={{width:'auto',minHeight:'auto'}} checked={settings.deliveryFeesConfirmed===true} onChange={e=>setSettings({...settings,deliveryFeesConfirmed:e.target.checked})}/> I confirm these are the store's current delivery fees.</label>
   <button>Save shipping settings</button><button type="button" className="secondary" onClick={()=>setSettingsEditingGroup(null)}>Cancel</button>
+ </form>}
+</section>
+<section id="inventory-settings" className="admin-setting-group">
+ <div className="admin-task-card"><div><h3>Inventory alert threshold</h3><p>Low-stock alert threshold · {lowStockThreshold} units</p></div><button type="button" onClick={()=>setSettingsEditingGroup(settingsEditingGroup==='inventory' ? null : 'inventory')}>{settingsEditingGroup==='inventory'?'Close':'Edit'}</button></div>
+ {settingsEditingGroup==='inventory'&&<form className="admin-task-form" onSubmit={e=>saveSettings(e,'Inventory alerts')}>
+  <h3>Edit inventory alerts</h3><label>Low-stock alert threshold (units)<input type="number" min="0" max="1000" step="1" value={settings.lowStockThreshold??3} onChange={e=>setSettings({...settings,lowStockThreshold:Number(e.target.value)})}/></label>
+  <button>Save inventory threshold</button><button type="button" className="secondary" onClick={()=>setSettingsEditingGroup(null)}>Cancel</button>
  </form>}
 </section>
 <section id="contact-details" className="admin-setting-group">
