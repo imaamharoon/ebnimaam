@@ -41,6 +41,8 @@ const defaultSettings = {
   storeName:'ebnimaam',country:'Nigeria',deliveryCountries:['Nigeria'],deliveryFeesByState:{},deliveryFeesConfirmed:false,
   pickupAddress:'',pickupAddressConfirmed:false,pickupHours:'',holidayExceptions:'',deliveryRules:'',
   supportEmail:'ebnimaam.com@gmail.com',supportPhone:'08145672755',lowStockThreshold:3,socialLinks:{whatsappChannel:WHATSAPP_CHANNEL_URL},
+  theme:{navy:'#0A192F',navy2:'#10233E',gold:'#D6A64C',cream:'#FAF8F2',paper:'#FFFEFA',ink:'#17263C'},
+  heroBanner:{title:'Shop Smart, Live Better.',subtitle:'Premium quality, great prices. Discover fashion, everyday essentials and thoughtful finds.',ctaText:'Shop Now',ctaHref:'#shop',backgroundImage:'/assets/ebnimaam-hero-gold.webp'},
   returnsPolicy:'',privacyPolicy:'',terms:'',shippingPolicy:'',promotions:[],
 };
 async function init() {
@@ -86,6 +88,35 @@ export async function PUT(req: Request) {
     const lowStockThreshold=Number(body.lowStockThreshold ?? defaultSettings.lowStockThreshold);
     if(!Number.isSafeInteger(lowStockThreshold)||lowStockThreshold<0||lowStockThreshold>1000) return NextResponse.json({error:'Low-stock alert threshold must be a whole number from 0 to 1,000.'},{status:400});
     const socialLinks = normalizeSocialLinks(body.socialLinks);
+    const rawTheme = body.theme && typeof body.theme === 'object' ? body.theme : {};
+    const colour = (value:any,fallback:string) => /^#[0-9a-f]{6}$/i.test(String(value||'')) ? String(value).toUpperCase() : fallback;
+    const theme = {
+      navy:colour(rawTheme.navy,defaultSettings.theme.navy),
+      navy2:colour(rawTheme.navy2,defaultSettings.theme.navy2),
+      gold:colour(rawTheme.gold,defaultSettings.theme.gold),
+      cream:colour(rawTheme.cream,defaultSettings.theme.cream),
+      paper:colour(rawTheme.paper,defaultSettings.theme.paper),
+      ink:colour(rawTheme.ink,defaultSettings.theme.ink),
+    };
+    const rawBanner = body.heroBanner && typeof body.heroBanner === 'object' ? body.heroBanner : {};
+    const backgroundImage = String(rawBanner.backgroundImage ?? defaultSettings.heroBanner.backgroundImage).trim().slice(0,3500000);
+    const safeImage = !backgroundImage ||
+      (backgroundImage.startsWith('/assets/') && !backgroundImage.includes('..')) ||
+      /^https:\/\/[^\s"'<>]+$/i.test(backgroundImage) ||
+      /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(backgroundImage);
+    if (!safeImage) return NextResponse.json({error:'Use an HTTPS image URL, an Ebnimaam asset, or upload a JPG, PNG or WebP banner.'},{status:400});
+    const ctaHref = String(rawBanner.ctaHref ?? '#shop').trim().slice(0,300);
+    if (!(ctaHref.startsWith('/') || ctaHref.startsWith('#') || /^https:\/\/[^\s"'<>]+$/i.test(ctaHref))) {
+      return NextResponse.json({error:'The banner button must use a site path, page anchor or HTTPS link.'},{status:400});
+    }
+    const heroBanner = {
+      title:String(rawBanner.title ?? defaultSettings.heroBanner.title).trim().slice(0,100),
+      subtitle:String(rawBanner.subtitle ?? defaultSettings.heroBanner.subtitle).trim().slice(0,260),
+      ctaText:String(rawBanner.ctaText ?? defaultSettings.heroBanner.ctaText).trim().slice(0,32),
+      ctaHref,
+      backgroundImage,
+    };
+    if (!heroBanner.title || !heroBanner.ctaText) return NextResponse.json({error:'Add a banner headline and button label before saving.'},{status:400});
     const allowed = {
       ...defaultSettings,
       ...body,
@@ -98,6 +129,8 @@ export async function PUT(req: Request) {
       deliveryFeesByState,
       lowStockThreshold,
       socialLinks,
+      theme,
+      heroBanner,
     };
     await pool.query('UPDATE public.ebnimaam_store_settings SET settings=$1::jsonb,updated_at=NOW() WHERE id=1',[JSON.stringify(allowed)]);
     await recordAdminActivity('store_settings.updated', 'store_settings', '1', { updatedKeys: Object.keys(body).slice(0, 20).join(',') });
